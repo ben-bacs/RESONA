@@ -17,7 +17,7 @@ RESONA is a lightweight, ambient desktop application engineered for Windows 11 t
 
 ---
 
-## 🎨 Launch Scenes Collection (8 Presets)
+##  Launch Scenes Collection (8 Presets)
 
 RESONA includes eight launch WebGL2 scenes, each tailored with distinct audio reaction mappings, trusted color palettes, and quality-tier parameter ceilings (Low, Balanced, High):
 
@@ -40,7 +40,7 @@ RESONA includes eight launch WebGL2 scenes, each tailored with distinct audio re
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -72,7 +72,7 @@ npm run tauri dev
 
 ---
 
-## 📦 Deployment & Releases
+##  Deployment & Releases
 
 Automated distribution is configured through **GitHub Actions** workflows targeting **GitHub Releases**:
 - **NSIS (`.exe`)** and **WiX (`.msi`)** standalone installers are compiled on `windows-latest` runners for tag pushes (`v*`).
@@ -81,6 +81,6 @@ Automated distribution is configured through **GitHub Actions** workflows target
 
 ---
 
-## 📄 License
+##  License
 
 MIT License. See [LICENSE](LICENSE) for details.
