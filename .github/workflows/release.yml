@@ -44,3 +44,4 @@ jobs:
           releaseBody: 'See changelog for release details. Includes Windows 11 NSIS and MSI installers.'
           releaseDraft: false
           prerelease: false
+          args: --ignore-version-mismatches
