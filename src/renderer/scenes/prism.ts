@@ -3,7 +3,7 @@ import { AnalysisFrame, AppearanceParameters, QualityTier } from "../../types/co
 import { createProgram, createQuad, QUAD_VS } from "../gl-utils";
 import { resolvePalette } from "../palette-utils";
 
-export class PulseRingScene implements IScene {
+export class PrismScene implements IScene {
   private gl: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
   private vao: WebGLVertexArrayObject | null = null;
@@ -17,17 +17,17 @@ export class PulseRingScene implements IScene {
   private uTransientLoc: WebGLUniformLocation | null = null;
   private uBrightnessLoc: WebGLUniformLocation | null = null;
   private uSensitivityLoc: WebGLUniformLocation | null = null;
-  private uRingWidthLoc: WebGLUniformLocation | null = null;
-  private uGlowLoc: WebGLUniformLocation | null = null;
+  private uSymmetryLoc: WebGLUniformLocation | null = null;
+  private uRotationLoc: WebGLUniformLocation | null = null;
   private uColorALoc: WebGLUniformLocation | null = null;
   private uColorBLoc: WebGLUniformLocation | null = null;
   private uColorCLoc: WebGLUniformLocation | null = null;
 
   private width = 800;
   private height = 600;
+  private currentAngle = 0;
   private time = 0;
 
-  // Smoothed / decaying audio values
   private smoothedRms = 0;
   private smoothedTransient = 0;
   private smoothedBands = new Float32Array(64);
@@ -36,11 +36,11 @@ export class PulseRingScene implements IScene {
     brightness: 0.85,
     sensitivity: 1.0,
     motionSpeed: 1.0,
-    colorPalette: "neon_violet",
-    bloomIntensity: 0.6,
+    colorPalette: "chromatic_prism",
+    bloomIntensity: 0.7,
     presetSpecific: {
-      ringWidthPx: 3,
-      glow: 0.35,
+      symmetry: 6,
+      rotationDegPerSec: 6.0,
     },
   };
 
@@ -59,8 +59,8 @@ export class PulseRingScene implements IScene {
       uniform float u_transient;
       uniform float u_brightness;
       uniform float u_sensitivity;
-      uniform float u_ringWidthPx;
-      uniform float u_glow;
+      uniform float u_symmetry;
+      uniform float u_currentAngle;
       uniform vec3 u_colorA;
       uniform vec3 u_colorB;
       uniform vec3 u_colorC;
@@ -74,37 +74,42 @@ export class PulseRingScene implements IScene {
         }
 
         vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution) / min(u_resolution.x, u_resolution.y);
-        float dist = length(uv);
-        float angle = atan(uv.y, uv.x);
-        if (angle < 0.0) angle += 2.0 * PI;
+        float r = length(uv);
+        float a = atan(uv.y, uv.x) + u_currentAngle;
 
-        // Sample band corresponding to angle around circle (mirrored for symmetry)
-        float normalizedAngle = abs(angle / PI - 1.0);
-        int bandIndex = int(clamp(normalizedAngle * 63.0, 0.0, 63.0));
-        float bandEnergy = u_bands[bandIndex] * u_sensitivity;
+        // Fold coordinate space into N symmetry sectors
+        float sectors = max(2.0, u_symmetry);
+        float sectorAngle = (2.0 * PI) / sectors;
+        a = mod(a, sectorAngle) - 0.5 * sectorAngle;
+        a = abs(a); // Mirror symmetry inside sector
 
-        // Base ring radius modulated by audio loudness & transient
-        float baseRadius = 0.45 + (u_rms * 0.18) + (u_transient * 0.08);
-        float wave = sin(angle * 12.0 + u_time * 2.0) * (0.015 + bandEnergy * 0.09);
-        float ringDistance = abs(dist - (baseRadius + wave));
+        // Reconstruct folded UV coordinates
+        vec2 foldedUv = vec2(cos(a), sin(a)) * r;
 
-        // Thickness & glow in logical pixels converted to NDC
-        float minDimension = min(u_resolution.x, u_resolution.y);
-        float thickness = max(u_ringWidthPx / minDimension, 0.004) + (bandEnergy * 0.02);
-        float glowFactor = 0.2 + u_glow * 1.5;
-        float glow = (thickness / max(ringDistance, 0.0008)) * u_brightness * glowFactor;
+        // Sample spectrum based on radial coordinate
+        int bandIdx = int(clamp(r * 32.0, 0.0, 63.0));
+        float bandEnergy = u_bands[bandIdx] * u_sensitivity;
 
-        // Dynamic neon palette blending
-        vec3 ringColor = mix(u_colorA, u_colorB, sin(angle + u_time * 0.8) * 0.5 + 0.5);
-        ringColor = mix(ringColor, u_colorC, clamp(u_transient * 0.8 + bandEnergy * 0.4, 0.0, 1.0));
+        // Crystalline facet geometry
+        float facet1 = abs(foldedUv.x - 0.35 - (u_rms * 0.15));
+        float facet2 = abs(foldedUv.y - foldedUv.x * 0.577 - (bandEnergy * 0.1));
+        float facet3 = abs(r - 0.5 - (u_transient * 0.12));
 
-        vec3 finalColor = ringColor * glow;
+        float line1 = smoothstep(0.015, 0.0, facet1);
+        float line2 = smoothstep(0.015, 0.0, facet2);
+        float line3 = smoothstep(0.02, 0.0, facet3);
 
-        // Subtle ambient center aura
-        float aura = u_colorA.r * 0.05 + u_colorB.g * 0.05;
-        finalColor += u_colorA * (aura * u_brightness * (1.0 - smoothstep(0.0, 1.3, dist)));
+        float pattern = max(line1, max(line2, line3));
 
-        // Tone map clamp
+        // Prism refraction color shifting
+        float dispersion = sin(r * 8.0 - u_time * 1.5) * 0.5 + 0.5;
+        vec3 prismCol = mix(u_colorA, u_colorB, dispersion);
+        prismCol = mix(prismCol, u_colorC, pattern * 0.7);
+
+        // Core jewel glow
+        float centerGlow = 0.06 / (r + 0.08) * (0.8 + u_rms * 1.2);
+        vec3 finalColor = prismCol * (pattern * 1.5 + centerGlow) * u_brightness;
+
         finalColor = clamp(finalColor, 0.0, 1.0);
         fragColor = vec4(finalColor, 1.0);
       }
@@ -119,7 +124,6 @@ export class PulseRingScene implements IScene {
     this.vao = quad.vao;
     this.vbo = quad.vbo;
 
-    // Uniform locations
     this.uResolutionLoc = gl.getUniformLocation(prog, "u_resolution");
     this.uTimeLoc = gl.getUniformLocation(prog, "u_time");
     this.uBandsLoc = gl.getUniformLocation(prog, "u_bands");
@@ -127,8 +131,8 @@ export class PulseRingScene implements IScene {
     this.uTransientLoc = gl.getUniformLocation(prog, "u_transient");
     this.uBrightnessLoc = gl.getUniformLocation(prog, "u_brightness");
     this.uSensitivityLoc = gl.getUniformLocation(prog, "u_sensitivity");
-    this.uRingWidthLoc = gl.getUniformLocation(prog, "u_ringWidthPx");
-    this.uGlowLoc = gl.getUniformLocation(prog, "u_glow");
+    this.uSymmetryLoc = gl.getUniformLocation(prog, "u_symmetry");
+    this.uRotationLoc = gl.getUniformLocation(prog, "u_currentAngle");
     this.uColorALoc = gl.getUniformLocation(prog, "u_colorA");
     this.uColorBLoc = gl.getUniformLocation(prog, "u_colorB");
     this.uColorCLoc = gl.getUniformLocation(prog, "u_colorC");
@@ -149,16 +153,18 @@ export class PulseRingScene implements IScene {
   }
 
   update(deltaSeconds: number, analysis: AnalysisFrame): void {
-    // Clamp delta time to avoid large jumps
     const dt = Math.min(deltaSeconds, 0.05);
     this.time += dt * this.parameters.motionSpeed;
 
-    // Silence and stale-frame decay
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const decaySpeed = isSilent ? 4.0 : 12.0;
-    const factor = Math.min(1.0, dt * decaySpeed);
+    // Reduced motion clamps rotation to 0
+    const rotSpeedDeg = Number(this.parameters.presetSpecific?.rotationDegPerSec ?? 6.0);
+    const radPerSec = (rotSpeedDeg * Math.PI) / 180.0;
+    this.currentAngle += radPerSec * dt * this.parameters.motionSpeed;
 
-    const targetRms = isSilent ? 0.0 : analysis.rms;
+    const isSilent = !analysis || analysis.activity === "Silent";
+    const factor = Math.min(1.0, dt * (isSilent ? 4.0 : 12.0));
+
+    const targetRms = isSilent ? 0.0 : analysis.rms * this.parameters.sensitivity;
     const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
 
     this.smoothedRms += (targetRms - this.smoothedRms) * factor;
@@ -182,13 +188,10 @@ export class PulseRingScene implements IScene {
     gl.uniform1f(this.uBrightnessLoc, this.parameters.brightness);
     gl.uniform1f(this.uSensitivityLoc, this.parameters.sensitivity);
 
-    // Scene specific parameters
-    const ringWidth = Number(this.parameters.presetSpecific?.ringWidthPx ?? 3.0);
-    const glow = Number(this.parameters.presetSpecific?.glow ?? 0.35);
-    gl.uniform1f(this.uRingWidthLoc, ringWidth);
-    gl.uniform1f(this.uGlowLoc, glow);
+    const symmetry = Math.round(Number(this.parameters.presetSpecific?.symmetry ?? 6.0));
+    gl.uniform1f(this.uSymmetryLoc, Math.min(16, Math.max(2, symmetry)));
+    gl.uniform1f(this.uRotationLoc, this.currentAngle);
 
-    // Palette
     const [cA, cB, cC] = resolvePalette(this.parameters.colorPalette);
     gl.uniform3f(this.uColorALoc, cA.r, cA.g, cA.b);
     gl.uniform3f(this.uColorBLoc, cB.r, cB.g, cB.b);

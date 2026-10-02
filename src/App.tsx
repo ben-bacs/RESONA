@@ -97,6 +97,7 @@ export function App() {
         {/* Right Column: Controls & Presets Gallery (7 cols) */}
         <section className="lg:col-span-7 flex flex-col gap-6 overflow-y-auto pr-1">
           <Controls
+            selectedSceneId={candidateSceneId}
             parameters={parameters}
             onChangeParameters={setParameters}
             onResetDefaults={handleResetDefaults}

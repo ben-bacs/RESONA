@@ -3,7 +3,7 @@ import { AnalysisFrame, AppearanceParameters, QualityTier } from "../../types/co
 import { createProgram, createQuad, QUAD_VS } from "../gl-utils";
 import { resolvePalette } from "../palette-utils";
 
-export class PulseRingScene implements IScene {
+export class NeonHighwayScene implements IScene {
   private gl: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
   private vao: WebGLVertexArrayObject | null = null;
@@ -13,12 +13,13 @@ export class PulseRingScene implements IScene {
   private uResolutionLoc: WebGLUniformLocation | null = null;
   private uTimeLoc: WebGLUniformLocation | null = null;
   private uBandsLoc: WebGLUniformLocation | null = null;
-  private uRmsLoc: WebGLUniformLocation | null = null;
+  private uBassLoc: WebGLUniformLocation | null = null;
+  private uMidLoc: WebGLUniformLocation | null = null;
   private uTransientLoc: WebGLUniformLocation | null = null;
   private uBrightnessLoc: WebGLUniformLocation | null = null;
   private uSensitivityLoc: WebGLUniformLocation | null = null;
-  private uRingWidthLoc: WebGLUniformLocation | null = null;
-  private uGlowLoc: WebGLUniformLocation | null = null;
+  private uGridLinesLoc: WebGLUniformLocation | null = null;
+  private uHorizonGlowLoc: WebGLUniformLocation | null = null;
   private uColorALoc: WebGLUniformLocation | null = null;
   private uColorBLoc: WebGLUniformLocation | null = null;
   private uColorCLoc: WebGLUniformLocation | null = null;
@@ -26,26 +27,28 @@ export class PulseRingScene implements IScene {
   private width = 800;
   private height = 600;
   private time = 0;
+  private quality: QualityTier = "high";
 
-  // Smoothed / decaying audio values
-  private smoothedRms = 0;
+  private smoothedBass = 0;
+  private smoothedMid = 0;
   private smoothedTransient = 0;
   private smoothedBands = new Float32Array(64);
 
   private parameters: AppearanceParameters = {
-    brightness: 0.85,
+    brightness: 0.9,
     sensitivity: 1.0,
-    motionSpeed: 1.0,
-    colorPalette: "neon_violet",
-    bloomIntensity: 0.6,
+    motionSpeed: 1.1,
+    colorPalette: "synthwave",
+    bloomIntensity: 0.8,
     presetSpecific: {
-      ringWidthPx: 3,
-      glow: 0.35,
+      gridLines: 24,
+      horizonGlow: 0.4,
     },
   };
 
-  initialize(gl: WebGL2RenderingContext, _quality: QualityTier, _seed?: number): boolean {
+  initialize(gl: WebGL2RenderingContext, quality: QualityTier, _seed?: number): boolean {
     this.gl = gl;
+    this.quality = quality;
 
     const fsSource = `#version 300 es
       precision highp float;
@@ -55,12 +58,13 @@ export class PulseRingScene implements IScene {
       uniform vec2 u_resolution;
       uniform float u_time;
       uniform float u_bands[64];
-      uniform float u_rms;
+      uniform float u_bass;
+      uniform float u_mid;
       uniform float u_transient;
       uniform float u_brightness;
       uniform float u_sensitivity;
-      uniform float u_ringWidthPx;
-      uniform float u_glow;
+      uniform int u_gridLines;
+      uniform float u_horizonGlow;
       uniform vec3 u_colorA;
       uniform vec3 u_colorB;
       uniform vec3 u_colorC;
@@ -73,38 +77,76 @@ export class PulseRingScene implements IScene {
           return;
         }
 
+        // Screen coords normalized to [-1, 1]
         vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution) / min(u_resolution.x, u_resolution.y);
-        float dist = length(uv);
-        float angle = atan(uv.y, uv.x);
-        if (angle < 0.0) angle += 2.0 * PI;
+        vec3 finalColor = vec3(0.0);
 
-        // Sample band corresponding to angle around circle (mirrored for symmetry)
-        float normalizedAngle = abs(angle / PI - 1.0);
-        int bandIndex = int(clamp(normalizedAngle * 63.0, 0.0, 63.0));
-        float bandEnergy = u_bands[bandIndex] * u_sensitivity;
+        float horizonY = -0.05;
 
-        // Base ring radius modulated by audio loudness & transient
-        float baseRadius = 0.45 + (u_rms * 0.18) + (u_transient * 0.08);
-        float wave = sin(angle * 12.0 + u_time * 2.0) * (0.015 + bandEnergy * 0.09);
-        float ringDistance = abs(dist - (baseRadius + wave));
+        if (uv.y < horizonY) {
+          // Perspective floor plane
+          float depth = horizonY / (uv.y - horizonY);
+          float worldZ = depth * 2.0 + u_time * 2.5;
+          float worldX = uv.x * depth * 2.5;
 
-        // Thickness & glow in logical pixels converted to NDC
-        float minDimension = min(u_resolution.x, u_resolution.y);
-        float thickness = max(u_ringWidthPx / minDimension, 0.004) + (bandEnergy * 0.02);
-        float glowFactor = 0.2 + u_glow * 1.5;
-        float glow = (thickness / max(ringDistance, 0.0008)) * u_brightness * glowFactor;
+          // Bass terrain undulation along sides
+          float sideDist = abs(worldX);
+          float terrainAmp = u_bass * 0.4 * smoothstep(1.0, 3.5, sideDist);
+          float terrain = sin(worldZ * 1.5 + worldX) * terrainAmp;
 
-        // Dynamic neon palette blending
-        vec3 ringColor = mix(u_colorA, u_colorB, sin(angle + u_time * 0.8) * 0.5 + 0.5);
-        ringColor = mix(ringColor, u_colorC, clamp(u_transient * 0.8 + bandEnergy * 0.4, 0.0, 1.0));
+          // Grid line density
+          float density = float(clamp(u_gridLines, 8, 64)) * 0.15;
+          float gridX = fract(worldX * density);
+          float gridZ = fract(worldZ * density);
 
-        vec3 finalColor = ringColor * glow;
+          float lineX = abs(gridX - 0.5);
+          float lineZ = abs(gridZ - 0.5);
 
-        // Subtle ambient center aura
-        float aura = u_colorA.r * 0.05 + u_colorB.g * 0.05;
-        finalColor += u_colorA * (aura * u_brightness * (1.0 - smoothstep(0.0, 1.3, dist)));
+          // Grid wire thickness
+          float wireX = smoothstep(0.46, 0.5, lineX);
+          float wireZ = smoothstep(0.46, 0.5, lineZ);
+          float gridVal = max(wireX, wireZ);
 
-        // Tone map clamp
+          // Perspective depth fade
+          float fog = clamp(1.0 / (depth * 0.35 + 1.0), 0.0, 1.0);
+
+          // Grid line coloring
+          vec3 gridColor = mix(u_colorA, u_colorB, sin(worldZ * 0.2) * 0.5 + 0.5);
+          gridColor = mix(gridColor, u_colorC, u_transient * 0.5);
+
+          finalColor = gridColor * gridVal * fog * (1.0 + u_mid * 0.8);
+
+          // Reflective surface glow
+          finalColor += u_colorA * (0.05 * fog * (1.0 + terrain));
+        } else {
+          // Sky / Horizon gradient
+          float skyY = (uv.y - horizonY);
+          float sunDist = length(vec2(uv.x * 1.2, uv.y - 0.25));
+
+          // Synthwave Sun
+          if (sunDist < 0.45) {
+            float sunGrad = (uv.y - 0.25 + 0.45) / 0.9;
+            vec3 sunColor = mix(u_colorA, u_colorC, sunGrad);
+
+            // Sun horizontal blind stripes
+            float stripes = sin((uv.y - 0.25) * 45.0);
+            if (stripes > 0.3 && uv.y < 0.25) {
+              sunColor *= 0.15;
+            }
+
+            finalColor = sunColor * (1.0 + u_transient * 0.6);
+          }
+
+          // Sky background ambient
+          finalColor += u_colorB * (0.08 * exp(-skyY * 2.0));
+        }
+
+        // Horizon glow halo
+        float horizonDist = abs(uv.y - horizonY);
+        float halo = exp(-horizonDist * 18.0) * (0.3 + u_horizonGlow * 1.2 + u_transient * 0.5);
+        finalColor += u_colorB * halo;
+
+        finalColor *= u_brightness;
         finalColor = clamp(finalColor, 0.0, 1.0);
         fragColor = vec4(finalColor, 1.0);
       }
@@ -119,16 +161,16 @@ export class PulseRingScene implements IScene {
     this.vao = quad.vao;
     this.vbo = quad.vbo;
 
-    // Uniform locations
     this.uResolutionLoc = gl.getUniformLocation(prog, "u_resolution");
     this.uTimeLoc = gl.getUniformLocation(prog, "u_time");
     this.uBandsLoc = gl.getUniformLocation(prog, "u_bands");
-    this.uRmsLoc = gl.getUniformLocation(prog, "u_rms");
+    this.uBassLoc = gl.getUniformLocation(prog, "u_bass");
+    this.uMidLoc = gl.getUniformLocation(prog, "u_mid");
     this.uTransientLoc = gl.getUniformLocation(prog, "u_transient");
     this.uBrightnessLoc = gl.getUniformLocation(prog, "u_brightness");
     this.uSensitivityLoc = gl.getUniformLocation(prog, "u_sensitivity");
-    this.uRingWidthLoc = gl.getUniformLocation(prog, "u_ringWidthPx");
-    this.uGlowLoc = gl.getUniformLocation(prog, "u_glow");
+    this.uGridLinesLoc = gl.getUniformLocation(prog, "u_gridLines");
+    this.uHorizonGlowLoc = gl.getUniformLocation(prog, "u_horizonGlow");
     this.uColorALoc = gl.getUniformLocation(prog, "u_colorA");
     this.uColorBLoc = gl.getUniformLocation(prog, "u_colorB");
     this.uColorCLoc = gl.getUniformLocation(prog, "u_colorC");
@@ -149,19 +191,18 @@ export class PulseRingScene implements IScene {
   }
 
   update(deltaSeconds: number, analysis: AnalysisFrame): void {
-    // Clamp delta time to avoid large jumps
     const dt = Math.min(deltaSeconds, 0.05);
     this.time += dt * this.parameters.motionSpeed;
 
-    // Silence and stale-frame decay
     const isSilent = !analysis || analysis.activity === "Silent";
-    const decaySpeed = isSilent ? 4.0 : 12.0;
-    const factor = Math.min(1.0, dt * decaySpeed);
+    const factor = Math.min(1.0, dt * (isSilent ? 4.0 : 12.0));
 
-    const targetRms = isSilent ? 0.0 : analysis.rms;
+    const targetBass = isSilent ? 0.0 : analysis.bass * this.parameters.sensitivity;
+    const targetMid = isSilent ? 0.0 : analysis.mid * this.parameters.sensitivity;
     const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
 
-    this.smoothedRms += (targetRms - this.smoothedRms) * factor;
+    this.smoothedBass += (targetBass - this.smoothedBass) * factor;
+    this.smoothedMid += (targetMid - this.smoothedMid) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
     for (let i = 0; i < 64; i++) {
@@ -182,20 +223,23 @@ export class PulseRingScene implements IScene {
     gl.uniform1f(this.uBrightnessLoc, this.parameters.brightness);
     gl.uniform1f(this.uSensitivityLoc, this.parameters.sensitivity);
 
-    // Scene specific parameters
-    const ringWidth = Number(this.parameters.presetSpecific?.ringWidthPx ?? 3.0);
-    const glow = Number(this.parameters.presetSpecific?.glow ?? 0.35);
-    gl.uniform1f(this.uRingWidthLoc, ringWidth);
-    gl.uniform1f(this.uGlowLoc, glow);
+    // Quality tier caps for grid lines: Low: 24, Medium: 48, High: 64
+    const maxTierLines = this.quality === "low" ? 24 : this.quality === "medium" ? 48 : 64;
+    const requestedLines = Math.round(Number(this.parameters.presetSpecific?.gridLines ?? 24));
+    const activeLines = Math.min(Math.max(8, requestedLines), maxTierLines);
+    gl.uniform1i(this.uGridLinesLoc, activeLines);
 
-    // Palette
+    const horizonGlow = Number(this.parameters.presetSpecific?.horizonGlow ?? 0.4);
+    gl.uniform1f(this.uHorizonGlowLoc, horizonGlow);
+
     const [cA, cB, cC] = resolvePalette(this.parameters.colorPalette);
     gl.uniform3f(this.uColorALoc, cA.r, cA.g, cA.b);
     gl.uniform3f(this.uColorBLoc, cB.r, cB.g, cB.b);
     gl.uniform3f(this.uColorCLoc, cC.r, cC.g, cC.b);
 
     gl.uniform1fv(this.uBandsLoc, this.smoothedBands);
-    gl.uniform1f(this.uRmsLoc, this.smoothedRms);
+    gl.uniform1f(this.uBassLoc, this.smoothedBass);
+    gl.uniform1f(this.uMidLoc, this.smoothedMid);
     gl.uniform1f(this.uTransientLoc, this.smoothedTransient);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
