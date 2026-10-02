@@ -32,7 +32,7 @@ RESONA includes eight launch WebGL2 scenes, each tailored with distinct audio re
 
 ---
 
-## 💾 Personalization, Variations & Smart Shuffler
+##  Personalization, Variations & Smart Shuffler
 
 - **User Variations**: Create, update, rename, and delete custom named variations (up to 500 records) with native Windows UUID identifiers.
 - **Inert Import / Export**: Safe portability with strict UTF-8 JSON validation (denying unknown fields, scripts, or paths, capped at 64 KB and 8 container levels). Tokenized 5-minute single-use review dialog before persisting.
