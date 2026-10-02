@@ -1,6 +1,6 @@
 {
   "name": "resona",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Music-Reactive Idle Visualizer for Windows 11",
   "private": true,
   "type": "module",
