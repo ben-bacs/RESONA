@@ -23,13 +23,16 @@ pub fn run() {
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("RESONA");
 
+    let mut audio_supervisor = AudioSupervisor::new();
+    let _ = audio_supervisor.start_capture(None);
+
     tauri::Builder::default()
         .setup(|app| {
             let _ = tray::create_tray(app.handle());
             Ok(())
         })
         .manage(AppCoordinator::new())
-        .manage(AudioState(Mutex::new(AudioSupervisor::new())))
+        .manage(AudioState(Mutex::new(audio_supervisor)))
         .manage(PersistenceState(Mutex::new(PersistenceService::new(
             config_dir,
         ))))
@@ -47,6 +50,7 @@ pub fn run() {
             ipc::list_audio_endpoints,
             ipc::start_audio_capture,
             ipc::stop_audio_capture,
+            ipc::get_latest_analysis_frame,
             ipc::get_settings_snapshot,
             ipc::save_settings_snapshot,
             ipc::toggle_favorite,

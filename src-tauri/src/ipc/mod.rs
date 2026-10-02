@@ -3,8 +3,8 @@ use crate::coordinator::AppCoordinator;
 use crate::persistence::PersistenceService;
 use crate::shuffler::{SceneShuffler, ShufflerAction};
 use crate::types::{
-    AppearanceParameters, AudioEndpoint, DisplayMode, ImportReviewResponse, LookRef,
-    RuntimeState, SceneId, SettingsSnapshot, ShuffleConfig, UserPreferences,
+    AnalysisFrame, AppearanceParameters, AudioEndpoint, DisplayMode, ImportReviewResponse,
+    LookRef, RuntimeState, SceneId, SettingsSnapshot, ShuffleConfig, UserPreferences,
 };
 use std::sync::Mutex;
 use tauri::State;
@@ -84,6 +84,11 @@ pub fn start_audio_capture(
 #[tauri::command]
 pub fn stop_audio_capture(audio_state: State<AudioState>) {
     audio_state.0.lock().unwrap().stop_capture();
+}
+
+#[tauri::command]
+pub fn get_latest_analysis_frame(audio_state: State<AudioState>) -> Option<AnalysisFrame> {
+    audio_state.0.lock().unwrap().get_latest_frame()
 }
 
 #[tauri::command]
