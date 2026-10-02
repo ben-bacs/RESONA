@@ -52,6 +52,6 @@ Automated distribution is handled via **GitHub Actions** workflows targeting **G
 
 ---
 
-## 📄 License
+##  License
 
 MIT License. See [LICENSE](LICENSE) for details.
