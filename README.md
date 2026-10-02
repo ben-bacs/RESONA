@@ -1,4 +1,4 @@
-# RESONA 🌌🎵
+# RESONA 
 
 > **Music-Reactive Idle Visualizer for Windows 11**
 
@@ -6,7 +6,7 @@ RESONA is a lightweight, ambient desktop application engineered for Windows 11 t
 
 ---
 
-## ⚡ Core Architecture
+##  Core Architecture
 
 - **Native Core**: [Tauri 2](https://v2.tauri.app/) + [Rust](https://www.rust-lang.org/)
 - **Audio Capture**: Direct Windows WASAPI loopback capture (`windows` crate) — zero microphone permissions needed.
@@ -16,7 +16,7 @@ RESONA is a lightweight, ambient desktop application engineered for Windows 11 t
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -44,7 +44,7 @@ npm run tauri build
 
 ---
 
-## 📦 Deployment & Releases
+##  Deployment & Releases
 
 Automated distribution is handled via **GitHub Actions** workflows targeting **GitHub Releases**:
 - Windows `.msi` and `.exe` (NSIS) installers are packaged and cryptographically hashed on each version tag (`v*`).
