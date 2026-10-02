@@ -1,5 +1,12 @@
 import { IScene } from "./scene-contract";
 import { PulseRingScene } from "./scenes/pulse-ring";
+import { SilkWaveScene } from "./scenes/silk-wave";
+import { StarDriftScene } from "./scenes/star-drift";
+import { NeonHighwayScene } from "./scenes/neon-highway";
+import { AuroraScene } from "./scenes/aurora";
+import { RippleScene } from "./scenes/ripple";
+import { PrismScene } from "./scenes/prism";
+import { ShockwaveScene } from "./scenes/shockwave";
 import { AnalysisFrame, AppearanceParameters, QualityTier, SceneId } from "../types/contracts";
 
 export class SceneManager {
@@ -7,6 +14,7 @@ export class SceneManager {
   private gl: WebGL2RenderingContext | null = null;
   private currentScene: IScene | null = null;
   private currentSceneId: SceneId | null = null;
+  private currentParams: AppearanceParameters | undefined;
   private animationFrameId: number | null = null;
   private lastTimestamp = 0;
   private quality: QualityTier = "high";
@@ -34,6 +42,37 @@ export class SceneManager {
     this.gl = gl;
   }
 
+  private createSceneInstance(sceneId: SceneId): IScene {
+    switch (sceneId) {
+      case "pulse_ring":
+        return new PulseRingScene();
+      case "silk_wave":
+        return new SilkWaveScene();
+      case "star_drift":
+        return new StarDriftScene();
+      case "neon_highway":
+        return new NeonHighwayScene();
+      case "aurora":
+        return new AuroraScene();
+      case "ripple":
+        return new RippleScene();
+      case "prism":
+        return new PrismScene();
+      case "shockwave":
+        return new ShockwaveScene();
+      default:
+        return new PulseRingScene();
+    }
+  }
+
+  public setQuality(quality: QualityTier) {
+    if (this.quality === quality) return;
+    this.quality = quality;
+    if (this.currentSceneId) {
+      this.setScene(this.currentSceneId, this.currentParams);
+    }
+  }
+
   public setScene(sceneId: SceneId, params?: AppearanceParameters): boolean {
     if (!this.gl) return false;
 
@@ -43,13 +82,7 @@ export class SceneManager {
       this.currentScene = null;
     }
 
-    let scene: IScene;
-    switch (sceneId) {
-      case "pulse_ring":
-      default:
-        scene = new PulseRingScene();
-        break;
-    }
+    const scene = this.createSceneInstance(sceneId);
 
     const success = scene.initialize(this.gl, this.quality);
     if (!success) {
@@ -57,6 +90,7 @@ export class SceneManager {
       return false;
     }
 
+    this.currentParams = params;
     if (params) {
       scene.applyParameters(params);
     }
@@ -72,6 +106,7 @@ export class SceneManager {
   }
 
   public applyParameters(params: AppearanceParameters) {
+    this.currentParams = params;
     if (this.currentScene) {
       this.currentScene.applyParameters(params);
     }
@@ -108,7 +143,7 @@ export class SceneManager {
   private loop = (timestamp: number) => {
     const deltaMs = timestamp - this.lastTimestamp;
     this.lastTimestamp = timestamp;
-    const deltaSec = Math.min(deltaMs / 1000, 0.1); // Clamp to avoid huge jumps
+    const deltaSec = Math.min(deltaMs / 1000, 0.05); // Clamp dt to 50ms per SDD Section 9
 
     if (this.currentScene && this.gl) {
       this.currentScene.update(deltaSec, this.latestAnalysisFrame);

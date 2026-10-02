@@ -12,6 +12,10 @@ export const LAUNCH_PRESETS: PresetMetadata[] = [
       motionSpeed: 1.0,
       colorPalette: "neon_violet",
       bloomIntensity: 0.6,
+      presetSpecific: {
+        ringWidthPx: 3,
+        glow: 0.35,
+      },
     },
   },
   {
@@ -25,6 +29,10 @@ export const LAUNCH_PRESETS: PresetMetadata[] = [
       motionSpeed: 0.9,
       colorPalette: "oceanic_azure",
       bloomIntensity: 0.5,
+      presetSpecific: {
+        layers: 3,
+        lineWidthPx: 2,
+      },
     },
   },
   {
@@ -38,6 +46,10 @@ export const LAUNCH_PRESETS: PresetMetadata[] = [
       motionSpeed: 1.2,
       colorPalette: "deep_cosmos",
       bloomIntensity: 0.7,
+      presetSpecific: {
+        density: 0.5,
+        travelSpeed: 0.2,
+      },
     },
   },
   {
@@ -51,6 +63,10 @@ export const LAUNCH_PRESETS: PresetMetadata[] = [
       motionSpeed: 1.1,
       colorPalette: "synthwave",
       bloomIntensity: 0.8,
+      presetSpecific: {
+        gridLines: 24,
+        horizonGlow: 0.4,
+      },
     },
   },
   {
@@ -64,6 +80,10 @@ export const LAUNCH_PRESETS: PresetMetadata[] = [
       motionSpeed: 0.8,
       colorPalette: "boreal_glow",
       bloomIntensity: 0.4,
+      presetSpecific: {
+        curtainCount: 4,
+        flowSpeed: 0.1,
+      },
     },
   },
   {
@@ -77,6 +97,10 @@ export const LAUNCH_PRESETS: PresetMetadata[] = [
       motionSpeed: 1.0,
       colorPalette: "monochrome_silver",
       bloomIntensity: 0.3,
+      presetSpecific: {
+        decaySeconds: 2.0,
+        ringWidthPx: 2.0,
+      },
     },
   },
   {
@@ -90,6 +114,10 @@ export const LAUNCH_PRESETS: PresetMetadata[] = [
       motionSpeed: 1.0,
       colorPalette: "chromatic_prism",
       bloomIntensity: 0.7,
+      presetSpecific: {
+        symmetry: 6,
+        rotationDegPerSec: 6.0,
+      },
     },
   },
   {
@@ -103,6 +131,10 @@ export const LAUNCH_PRESETS: PresetMetadata[] = [
       motionSpeed: 1.3,
       colorPalette: "solar_flare",
       bloomIntensity: 0.85,
+      presetSpecific: {
+        burstParticles: 64,
+        decaySeconds: 0.8,
+      },
     },
   },
 ];
