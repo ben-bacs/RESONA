@@ -70,3 +70,4 @@ export function resolvePalette(paletteIdOrHex: string): [RgbColor, RgbColor, Rgb
   }
   return TRUSTED_PALETTES.neon_violet;
 }
+

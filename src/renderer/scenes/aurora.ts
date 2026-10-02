@@ -239,3 +239,4 @@ export class AuroraScene implements IScene {
     this.gl = null;
   }
 }
+

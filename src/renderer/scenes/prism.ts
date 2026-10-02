@@ -216,3 +216,4 @@ export class PrismScene implements IScene {
     this.gl = null;
   }
 }
+

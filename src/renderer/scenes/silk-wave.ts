@@ -231,3 +231,4 @@ export class SilkWaveScene implements IScene {
     this.gl = null;
   }
 }
+

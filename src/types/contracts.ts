@@ -105,3 +105,50 @@ export interface UserPreferences {
   selectedPreset: SceneId;
   targetMonitorId?: string;
 }
+
+export type LookRef =
+  | { kind: "builtin"; scene_id: SceneId }
+  | { kind: "variation"; id: string };
+
+export interface PresetVariation {
+  id: string;
+  name: string;
+  sceneId: SceneId;
+  appearanceVersion: number;
+  appearance: AppearanceParameters;
+}
+
+export interface CommittedLook {
+  sceneId: SceneId;
+  appearanceVersion: number;
+  appearance: AppearanceParameters;
+  originVariationId?: string;
+}
+
+export type ShuffleSource = "favorites" | "selected";
+
+export interface ShuffleConfig {
+  enabled: boolean;
+  source: ShuffleSource;
+  selected: LookRef[];
+  intervalMinutes: number;
+}
+
+export interface SettingsSnapshot {
+  schemaVersion: number;
+  revision: number;
+  preferences: UserPreferences;
+  committedLook: CommittedLook;
+  variations: PresetVariation[];
+  favorites: LookRef[];
+  shuffle: ShuffleConfig;
+  onboardingCompleted: boolean;
+  closeToTrayExplained: boolean;
+}
+
+export interface ImportReviewResponse {
+  token: string;
+  name: string;
+  sceneId: SceneId;
+  appearance: AppearanceParameters;
+}
