@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  AnalysisFrame,
   AppearanceParameters,
   ImportReviewResponse,
   LookRef,
@@ -131,6 +132,14 @@ export const IpcService = {
         deltaSec,
         isFullscreenVisible,
       });
+    } catch {
+      return null;
+    }
+  },
+
+  async getLatestAnalysisFrame(): Promise<AnalysisFrame | null> {
+    try {
+      return await safeInvoke<AnalysisFrame | null>("get_latest_analysis_frame");
     } catch {
       return null;
     }

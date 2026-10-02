@@ -112,8 +112,11 @@ export class SceneManager {
     }
   }
 
+  private lastExternalFrameTime = 0;
+
   public updateAnalysisFrame(frame: AnalysisFrame) {
     this.latestAnalysisFrame = frame;
+    this.lastExternalFrameTime = performance.now();
   }
 
   public start() {
@@ -132,11 +135,11 @@ export class SceneManager {
   public handleResize() {
     if (!this.gl || !this.currentScene) return;
     const dpr = window.devicePixelRatio || 1;
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
+    const width = Math.max(1, this.canvas.clientWidth);
+    const height = Math.max(1, this.canvas.clientHeight);
 
-    this.canvas.width = width * dpr;
-    this.canvas.height = height * dpr;
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
     this.currentScene.resize(width, height, dpr);
   }
 
@@ -145,8 +148,14 @@ export class SceneManager {
     this.lastTimestamp = timestamp;
     const deltaSec = Math.min(deltaMs / 1000, 0.05); // Clamp dt to 50ms per SDD Section 9
 
+    // If no real audio frame has been received in 150ms, animate using ambient synthetic motion
+    const isExternalStale = (timestamp - this.lastExternalFrameTime) > 150;
+    const activeFrame = isExternalStale
+      ? this.createSyntheticFrame(timestamp / 1000)
+      : this.latestAnalysisFrame;
+
     if (this.currentScene && this.gl) {
-      this.currentScene.update(deltaSec, this.latestAnalysisFrame);
+      this.currentScene.update(deltaSec, activeFrame);
       this.currentScene.render();
     }
 

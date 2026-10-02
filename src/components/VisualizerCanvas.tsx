@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { SceneManager } from "../renderer/scene-manager";
 import { AppearanceParameters, SceneId } from "../types/contracts";
+import { IpcService } from "../services/ipc";
 
 interface VisualizerCanvasProps {
   sceneId: SceneId;
@@ -15,6 +16,7 @@ export const VisualizerCanvas: React.FC<VisualizerCanvasProps> = ({
   isFullscreen = false,
   onExitFullscreen,
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const managerRef = useRef<SceneManager | null>(null);
 
@@ -26,16 +28,54 @@ export const VisualizerCanvas: React.FC<VisualizerCanvasProps> = ({
     manager.setScene(sceneId, parameters);
     manager.start();
 
+    // Initial resize once DOM layout is calculated
+    manager.handleResize();
+
     const handleResize = () => {
       manager.handleResize();
     };
 
     window.addEventListener("resize", handleResize);
 
+    const resizeObserver = new ResizeObserver(() => {
+      manager.handleResize();
+    });
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
     return () => {
       window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       manager.dispose();
       managerRef.current = null;
+    };
+  }, []);
+
+  // Poll latest native WASAPI loopback analysis frame
+  useEffect(() => {
+    let isRunning = true;
+    let inFlight = false;
+
+    const interval = setInterval(async () => {
+      if (!isRunning || inFlight) return;
+      inFlight = true;
+      try {
+        const frame = await IpcService.getLatestAnalysisFrame();
+        if (frame && isRunning && managerRef.current) {
+          managerRef.current.updateAnalysisFrame(frame);
+        }
+      } catch {
+        // Handled via synthetic ambient motion
+      } finally {
+        inFlight = false;
+      }
+    }, 30); // ~33 Hz audio frame synchronization
+
+    return () => {
+      isRunning = false;
+      clearInterval(interval);
     };
   }, []);
 
@@ -65,7 +105,10 @@ export const VisualizerCanvas: React.FC<VisualizerCanvasProps> = ({
   }, [isFullscreen, onExitFullscreen]);
 
   return (
-    <div className={`relative w-full h-full overflow-hidden ${isFullscreen ? "fixed inset-0 z-50 bg-black" : "rounded-2xl"}`}>
+    <div
+      ref={containerRef}
+      className={`relative w-full h-full overflow-hidden ${isFullscreen ? "fixed inset-0 z-50 bg-black" : "rounded-2xl"}`}
+    >
       <canvas
         ref={canvasRef}
         className="w-full h-full block cursor-pointer"
