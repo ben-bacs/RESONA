@@ -2,7 +2,8 @@ use crate::audio::AudioSupervisor;
 use crate::coordinator::AppCoordinator;
 use crate::persistence::PersistenceService;
 use crate::types::{
-    AppearanceParameters, AudioEndpoint, DisplayMode, RuntimeState, SceneId, UserPreferences,
+    AppearanceParameters, AudioEndpoint, DisplayMode, LookRef, RuntimeState, SceneId,
+    SettingsSnapshot, UserPreferences,
 };
 use std::sync::Mutex;
 use tauri::State;
@@ -81,6 +82,32 @@ pub fn start_audio_capture(
 #[tauri::command]
 pub fn stop_audio_capture(audio_state: State<AudioState>) {
     audio_state.0.lock().unwrap().stop_capture();
+}
+
+#[tauri::command]
+pub fn get_settings_snapshot(persistence: State<PersistenceState>) -> SettingsSnapshot {
+    persistence.0.lock().unwrap().load_snapshot()
+}
+
+#[tauri::command]
+pub fn save_settings_snapshot(
+    persistence: State<PersistenceState>,
+    snapshot: SettingsSnapshot,
+    expected_revision: Option<u64>,
+) -> Result<SettingsSnapshot, String> {
+    persistence
+        .0
+        .lock()
+        .unwrap()
+        .save_snapshot(&snapshot, expected_revision)
+}
+
+#[tauri::command]
+pub fn toggle_favorite(
+    persistence: State<PersistenceState>,
+    look_ref: LookRef,
+) -> Result<Vec<LookRef>, String> {
+    persistence.0.lock().unwrap().toggle_favorite(look_ref)
 }
 
 #[tauri::command]
