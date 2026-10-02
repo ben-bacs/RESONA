@@ -261,6 +261,33 @@ impl Default for CommittedLook {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShuffleSource {
+    Favorites,
+    Selected,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShuffleConfig {
+    pub enabled: bool,
+    pub source: ShuffleSource,
+    pub selected: Vec<LookRef>,
+    pub interval_minutes: u32,
+}
+
+impl Default for ShuffleConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            source: ShuffleSource::Favorites,
+            selected: Vec::new(),
+            interval_minutes: 5,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsSnapshot {
@@ -270,6 +297,12 @@ pub struct SettingsSnapshot {
     pub committed_look: CommittedLook,
     pub variations: Vec<PresetVariation>,
     pub favorites: Vec<LookRef>,
+    #[serde(default)]
+    pub shuffle: ShuffleConfig,
+    #[serde(default)]
+    pub onboarding_completed: bool,
+    #[serde(default)]
+    pub close_to_tray_explained: bool,
 }
 
 impl Default for SettingsSnapshot {
@@ -283,6 +316,19 @@ impl Default for SettingsSnapshot {
             favorites: vec![LookRef::Builtin {
                 scene_id: SceneId::PulseRing,
             }],
+            shuffle: ShuffleConfig::default(),
+            onboarding_completed: false,
+            close_to_tray_explained: false,
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportReviewResponse {
+    pub token: String,
+    pub name: String,
+    pub scene_id: SceneId,
+    pub appearance: AppearanceParameters,
+}
+

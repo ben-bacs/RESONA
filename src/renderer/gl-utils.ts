@@ -82,3 +82,4 @@ export function createQuad(
 
   return { vao, vbo };
 }
+

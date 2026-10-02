@@ -1,15 +1,17 @@
 use crate::audio::AudioSupervisor;
 use crate::coordinator::AppCoordinator;
 use crate::persistence::PersistenceService;
+use crate::shuffler::{SceneShuffler, ShufflerAction};
 use crate::types::{
-    AppearanceParameters, AudioEndpoint, DisplayMode, LookRef, RuntimeState, SceneId,
-    SettingsSnapshot, UserPreferences,
+    AppearanceParameters, AudioEndpoint, DisplayMode, ImportReviewResponse, LookRef,
+    RuntimeState, SceneId, SettingsSnapshot, ShuffleConfig, UserPreferences,
 };
 use std::sync::Mutex;
 use tauri::State;
 
 pub struct AudioState(pub Mutex<AudioSupervisor>);
 pub struct PersistenceState(pub Mutex<PersistenceService>);
+pub struct ShufflerState(pub Mutex<SceneShuffler>);
 
 #[tauri::command]
 pub fn get_runtime_state(coordinator: State<AppCoordinator>) -> RuntimeState {
@@ -135,3 +137,139 @@ pub fn save_appearance_parameters(
 ) -> Result<(), String> {
     persistence.0.lock().unwrap().save_parameters(&params)
 }
+
+// --- Variations CRUD IPC Commands ---
+
+#[tauri::command]
+pub fn create_variation(
+    persistence: State<PersistenceState>,
+    name: String,
+    scene_id: SceneId,
+    appearance: AppearanceParameters,
+    expected_revision: Option<u64>,
+) -> Result<SettingsSnapshot, String> {
+    persistence
+        .0
+        .lock()
+        .unwrap()
+        .create_variation(name, scene_id, appearance, expected_revision)
+}
+
+#[tauri::command]
+pub fn update_variation(
+    persistence: State<PersistenceState>,
+    id: String,
+    appearance: AppearanceParameters,
+    expected_revision: Option<u64>,
+) -> Result<SettingsSnapshot, String> {
+    persistence
+        .0
+        .lock()
+        .unwrap()
+        .update_variation(&id, appearance, expected_revision)
+}
+
+#[tauri::command]
+pub fn rename_variation(
+    persistence: State<PersistenceState>,
+    id: String,
+    new_name: String,
+    expected_revision: Option<u64>,
+) -> Result<SettingsSnapshot, String> {
+    persistence
+        .0
+        .lock()
+        .unwrap()
+        .rename_variation(&id, &new_name, expected_revision)
+}
+
+#[tauri::command]
+pub fn delete_variation(
+    persistence: State<PersistenceState>,
+    id: String,
+    expected_revision: Option<u64>,
+) -> Result<SettingsSnapshot, String> {
+    persistence
+        .0
+        .lock()
+        .unwrap()
+        .delete_variation(&id, expected_revision)
+}
+
+// --- Import / Export IPC Commands ---
+
+#[tauri::command]
+pub fn begin_import(
+    persistence: State<PersistenceState>,
+    json_string: String,
+) -> Result<ImportReviewResponse, String> {
+    persistence
+        .0
+        .lock()
+        .unwrap()
+        .begin_import(json_string.as_bytes())
+}
+
+#[tauri::command]
+pub fn commit_import(
+    persistence: State<PersistenceState>,
+    token: String,
+    expected_revision: Option<u64>,
+) -> Result<SettingsSnapshot, String> {
+    persistence
+        .0
+        .lock()
+        .unwrap()
+        .commit_import(&token, expected_revision)
+}
+
+#[tauri::command]
+pub fn cancel_import(persistence: State<PersistenceState>, token: String) {
+    persistence.0.lock().unwrap().cancel_import(&token);
+}
+
+#[tauri::command]
+pub fn export_variation(
+    persistence: State<PersistenceState>,
+    id: String,
+) -> Result<String, String> {
+    persistence.0.lock().unwrap().export_variation(&id)
+}
+
+// --- Shuffle IPC Commands ---
+
+#[tauri::command]
+pub fn save_shuffle_config(
+    persistence: State<PersistenceState>,
+    config: ShuffleConfig,
+    expected_revision: Option<u64>,
+) -> Result<SettingsSnapshot, String> {
+    let mut snap = persistence.0.lock().unwrap().load_snapshot();
+    snap.shuffle = config;
+    persistence
+        .0
+        .lock()
+        .unwrap()
+        .save_snapshot(&snap, expected_revision)
+}
+
+#[tauri::command]
+pub fn step_shuffler(
+    persistence: State<PersistenceState>,
+    shuffler: State<ShufflerState>,
+    delta_sec: f32,
+    is_fullscreen_visible: bool,
+) -> Option<LookRef> {
+    let snap = persistence.0.lock().unwrap().load_snapshot();
+    let action = shuffler
+        .0
+        .lock()
+        .unwrap()
+        .step(delta_sec, is_fullscreen_visible, &snap);
+
+    match action {
+        ShufflerAction::TransitionTo(look_ref) => Some(look_ref),
+        _ => None,
+    }
+}
+

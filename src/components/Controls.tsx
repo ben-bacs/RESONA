@@ -1,5 +1,5 @@
-import React from "react";
-import { AppearanceParameters, SceneId } from "../types/contracts";
+import React, { useState, useRef } from "react";
+import { AppearanceParameters, SceneId, ShuffleConfig } from "../types/contracts";
 import {
   Maximize2,
   Sliders,
@@ -11,6 +11,10 @@ import {
   Check,
   Palette,
   Sparkles,
+  BookmarkPlus,
+  Upload,
+  Shuffle,
+  Clock,
 } from "lucide-react";
 
 interface ControlsProps {
@@ -23,6 +27,10 @@ interface ControlsProps {
   onEnterFullscreen: () => void;
   autoIdleEnabled: boolean;
   onToggleAutoIdle: () => void;
+  onCreateVariation: (name: string) => void;
+  onImportFile: (jsonText: string) => void;
+  shuffleConfig: ShuffleConfig;
+  onChangeShuffleConfig: (config: ShuffleConfig) => void;
 }
 
 const PALETTES = [
@@ -46,7 +54,15 @@ export const Controls: React.FC<ControlsProps> = ({
   onEnterFullscreen,
   autoIdleEnabled,
   onToggleAutoIdle,
+  onCreateVariation,
+  onImportFile,
+  shuffleConfig,
+  onChangeShuffleConfig,
 }) => {
+  const [isSavingVariation, setIsSavingVariation] = useState(false);
+  const [variationName, setVariationName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const updateParam = (key: keyof AppearanceParameters, value: number | string) => {
     onChangeParameters({
       ...parameters,
@@ -62,6 +78,28 @@ export const Controls: React.FC<ControlsProps> = ({
         [key]: value,
       },
     });
+  };
+
+  const handleSaveVariationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!variationName.trim()) return;
+    onCreateVariation(variationName.trim());
+    setVariationName("");
+    setIsSavingVariation(false);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        onImportFile(text);
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const renderSceneSpecificControls = () => {
@@ -395,14 +433,39 @@ export const Controls: React.FC<ControlsProps> = ({
 
   return (
     <div className="bg-surface/80 border border-white/5 rounded-2xl p-5 space-y-6 backdrop-blur-xl">
-      <div className="flex items-center justify-between">
+      {/* Hidden File Input for Import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".json"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Sliders className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold tracking-wider text-muted uppercase">
             Appearance & Audio Tuning
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="Import an inert JSON variation"
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-white transition-colors py-1.5 px-3 rounded-lg hover:bg-white/5 border border-white/5"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Import
+          </button>
+          <button
+            onClick={() => setIsSavingVariation(true)}
+            title="Save current look as new named user variation"
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-white transition-colors py-1.5 px-3 rounded-lg hover:bg-white/5 border border-white/5"
+          >
+            <BookmarkPlus className="w-3.5 h-3.5" />
+            Save As Variation
+          </button>
           <button
             onClick={onResetDefaults}
             aria-label="Reset parameters to base defaults"
@@ -426,6 +489,38 @@ export const Controls: React.FC<ControlsProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Save Variation Inline Dialog */}
+      {isSavingVariation && (
+        <form
+          onSubmit={handleSaveVariationSubmit}
+          className="p-3 bg-surface border border-primary/40 rounded-xl flex items-center gap-3 animate-in fade-in duration-150"
+        >
+          <input
+            type="text"
+            placeholder="Variation Name (e.g. My Cosmic Pulse)..."
+            value={variationName}
+            maxLength={40}
+            autoFocus
+            onChange={(e) => setVariationName(e.target.value)}
+            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <button
+            type="submit"
+            disabled={!variationName.trim()}
+            className="px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSavingVariation(false)}
+            className="px-3 py-1.5 text-muted hover:text-white text-xs"
+          >
+            Cancel
+          </button>
+        </form>
+      )}
 
       {/* Sliders Grid: Common Parameters */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -555,6 +650,99 @@ export const Controls: React.FC<ControlsProps> = ({
             );
           })}
         </div>
+      </div>
+
+      {/* Smart Fullscreen Shuffler Settings */}
+      <div className="space-y-3 pt-3 border-t border-white/5 bg-surface/30 p-4 rounded-xl border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shuffle className="w-4 h-4 text-primary" />
+            <span className="text-xs font-semibold text-white/90">
+              Smart Fullscreen Shuffler
+            </span>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={shuffleConfig.enabled}
+              onChange={(e) =>
+                onChangeShuffleConfig({
+                  ...shuffleConfig,
+                  enabled: e.target.checked,
+                })
+              }
+              className="w-4 h-4 rounded accent-primary bg-white/10 border-white/20"
+            />
+            <span className="font-medium text-white/80">Enable Shuffle</span>
+          </label>
+        </div>
+
+        {shuffleConfig.enabled && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/5">
+            <div className="space-y-1">
+              <span className="text-[11px] text-muted">Shuffle Source</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChangeShuffleConfig({
+                      ...shuffleConfig,
+                      source: "favorites",
+                    })
+                  }
+                  className={`px-3 py-1 text-xs rounded-lg border transition-all ${
+                    shuffleConfig.source === "favorites"
+                      ? "bg-primary text-white border-primary"
+                      : "bg-surface/50 text-muted border-white/5 hover:text-white"
+                  }`}
+                >
+                  Favorites Pool
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChangeShuffleConfig({
+                      ...shuffleConfig,
+                      source: "selected",
+                    })
+                  }
+                  className={`px-3 py-1 text-xs rounded-lg border transition-all ${
+                    shuffleConfig.source === "selected"
+                      ? "bg-primary text-white border-primary"
+                      : "bg-surface/50 text-muted border-white/5 hover:text-white"
+                  }`}
+                >
+                  Selected Set
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-[11px]">
+                <span className="flex items-center gap-1 text-muted">
+                  <Clock className="w-3 h-3 text-cyan-400" /> Interval
+                </span>
+                <span className="font-mono text-white/90">
+                  {shuffleConfig.intervalMinutes} min
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="30"
+                step="1"
+                value={shuffleConfig.intervalMinutes}
+                onChange={(e) =>
+                  onChangeShuffleConfig({
+                    ...shuffleConfig,
+                    intervalMinutes: parseInt(e.target.value, 10),
+                  })
+                }
+                className="w-full accent-primary bg-white/10 rounded-lg h-1.5 cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Action Footer */}

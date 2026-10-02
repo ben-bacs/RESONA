@@ -4,13 +4,15 @@ pub mod dsp;
 pub mod ipc;
 pub mod persistence;
 pub mod session;
+pub mod shuffler;
 pub mod tray;
 pub mod types;
 
 use audio::AudioSupervisor;
 use coordinator::AppCoordinator;
-use ipc::{AudioState, PersistenceState};
+use ipc::{AudioState, PersistenceState, ShufflerState};
 use persistence::PersistenceService;
+use shuffler::SceneShuffler;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -31,6 +33,7 @@ pub fn run() {
         .manage(PersistenceState(Mutex::new(PersistenceService::new(
             config_dir,
         ))))
+        .manage(ShufflerState(Mutex::new(SceneShuffler::new())))
         .invoke_handler(tauri::generate_handler![
             ipc::get_runtime_state,
             ipc::set_display_mode,
@@ -50,8 +53,19 @@ pub fn run() {
             ipc::get_user_preferences,
             ipc::save_user_preferences,
             ipc::get_appearance_parameters,
-            ipc::save_appearance_parameters
+            ipc::save_appearance_parameters,
+            ipc::create_variation,
+            ipc::update_variation,
+            ipc::rename_variation,
+            ipc::delete_variation,
+            ipc::begin_import,
+            ipc::commit_import,
+            ipc::cancel_import,
+            ipc::export_variation,
+            ipc::save_shuffle_config,
+            ipc::step_shuffler
         ])
         .run(tauri::generate_context!())
         .expect("error while running RESONA native application");
 }
+

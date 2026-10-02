@@ -257,3 +257,4 @@ export class NeonHighwayScene implements IScene {
     this.gl = null;
   }
 }
+
