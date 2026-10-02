@@ -7,34 +7,58 @@ import { LAUNCH_PRESETS } from "./types/catalog";
 import { AppearanceParameters, SceneId } from "./types/contracts";
 
 export function App() {
-  const [selectedSceneId, setSelectedSceneId] = useState<SceneId>("pulse_ring");
+  const [candidateSceneId, setCandidateSceneId] = useState<SceneId>("pulse_ring");
+  const [committedSceneId, setCommittedSceneId] = useState<SceneId>("pulse_ring");
+  const [favorites, setFavorites] = useState<SceneId[]>(["pulse_ring", "star_drift"]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [autoIdleEnabled, setAutoIdleEnabled] = useState(true);
 
-  const initialPreset = LAUNCH_PRESETS.find((p) => p.id === selectedSceneId) || LAUNCH_PRESETS[0];
-  const [parameters, setParameters] = useState<AppearanceParameters>(initialPreset.defaultParameters);
+  const initialPreset =
+    LAUNCH_PRESETS.find((p) => p.id === candidateSceneId) || LAUNCH_PRESETS[0];
+  const [parameters, setParameters] = useState<AppearanceParameters>(
+    initialPreset.defaultParameters
+  );
 
   const handleSelectScene = (id: SceneId) => {
-    setSelectedSceneId(id);
+    setCandidateSceneId(id);
     const preset = LAUNCH_PRESETS.find((p) => p.id === id);
     if (preset) {
       setParameters(preset.defaultParameters);
     }
   };
 
+  const handleCommitLook = () => {
+    setCommittedSceneId(candidateSceneId);
+  };
+
+  const handleToggleFavorite = (id: SceneId) => {
+    if (favorites.includes(id)) {
+      setFavorites(favorites.filter((f) => f !== id));
+    } else {
+      setFavorites([...favorites, id]);
+    }
+  };
+
   const handleResetDefaults = () => {
-    const preset = LAUNCH_PRESETS.find((p) => p.id === selectedSceneId);
+    const preset = LAUNCH_PRESETS.find((p) => p.id === candidateSceneId);
     if (preset) {
       setParameters(preset.defaultParameters);
     }
   };
+
+  const isCommitted =
+    candidateSceneId === committedSceneId &&
+    JSON.stringify(parameters) ===
+      JSON.stringify(
+        LAUNCH_PRESETS.find((p) => p.id === committedSceneId)?.defaultParameters
+      );
 
   return (
     <div className="min-h-screen bg-background text-white p-6 flex flex-col gap-6 selection:bg-primary/30">
       {/* Fullscreen Overlay mode */}
       {isFullscreen && (
         <VisualizerCanvas
-          sceneId={selectedSceneId}
+          sceneId={candidateSceneId}
           parameters={parameters}
           isFullscreen={true}
           onExitFullscreen={() => setIsFullscreen(false)}
@@ -51,12 +75,19 @@ export function App() {
             <h2 className="text-sm font-semibold tracking-wider text-muted uppercase">
               Live Preview
             </h2>
-            <span className="text-xs text-primary font-mono">WebGL2 Engine</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-primary font-mono">
+                {LAUNCH_PRESETS.find((p) => p.id === candidateSceneId)?.name}
+              </span>
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-white/5 text-muted">
+                Candidate Draft
+              </span>
+            </div>
           </div>
 
-          <div className="flex-1 min-h-[320px] bg-surface/50 border border-white/5 rounded-2xl overflow-hidden relative shadow-2xl">
+          <div className="flex-1 min-h-[340px] bg-surface/50 border border-white/5 rounded-2xl overflow-hidden relative shadow-2xl">
             <VisualizerCanvas
-              sceneId={selectedSceneId}
+              sceneId={candidateSceneId}
               parameters={parameters}
               isFullscreen={false}
             />
@@ -69,14 +100,19 @@ export function App() {
             parameters={parameters}
             onChangeParameters={setParameters}
             onResetDefaults={handleResetDefaults}
+            onCommitLook={handleCommitLook}
+            isCommitted={isCommitted}
             onEnterFullscreen={() => setIsFullscreen(true)}
             autoIdleEnabled={autoIdleEnabled}
             onToggleAutoIdle={() => setAutoIdleEnabled(!autoIdleEnabled)}
           />
 
           <Gallery
-            selectedSceneId={selectedSceneId}
+            selectedSceneId={candidateSceneId}
+            committedSceneId={committedSceneId}
+            favorites={favorites}
             onSelectScene={handleSelectScene}
+            onToggleFavorite={handleToggleFavorite}
           />
         </section>
       </main>

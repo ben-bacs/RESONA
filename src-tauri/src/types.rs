@@ -40,7 +40,7 @@ pub struct AnalysisFrame {
     pub discontinuity: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppearanceParameters {
     pub brightness: f32,
@@ -202,7 +202,7 @@ impl Default for RuntimeState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserPreferences {
     pub auto_enabled: bool,
@@ -220,6 +220,69 @@ impl Default for UserPreferences {
             audio_gate_enabled: true,
             selected_preset: SceneId::PulseRing,
             target_monitor_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum LookRef {
+    Builtin { scene_id: SceneId },
+    Variation { id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresetVariation {
+    pub id: String,
+    pub name: String,
+    pub scene_id: SceneId,
+    pub appearance_version: u32,
+    pub appearance: AppearanceParameters,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommittedLook {
+    pub scene_id: SceneId,
+    pub appearance_version: u32,
+    pub appearance: AppearanceParameters,
+    pub origin_variation_id: Option<String>,
+}
+
+impl Default for CommittedLook {
+    fn default() -> Self {
+        Self {
+            scene_id: SceneId::PulseRing,
+            appearance_version: 1,
+            appearance: AppearanceParameters::default(),
+            origin_variation_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsSnapshot {
+    pub schema_version: u32,
+    pub revision: u64,
+    pub preferences: UserPreferences,
+    pub committed_look: CommittedLook,
+    pub variations: Vec<PresetVariation>,
+    pub favorites: Vec<LookRef>,
+}
+
+impl Default for SettingsSnapshot {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            revision: 1,
+            preferences: UserPreferences::default(),
+            committed_look: CommittedLook::default(),
+            variations: Vec::new(),
+            favorites: vec![LookRef::Builtin {
+                scene_id: SceneId::PulseRing,
+            }],
         }
     }
 }
