@@ -31,10 +31,17 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
-    "icon": [],
+    "icon": ["icons/icon.ico"],
+    "publisher": "Benedict Neil D. Bacud",
+    "copyright": "Copyright © 2026 Benedict Neil D. Bacud",
+    "shortDescription": "Music-Reactive Idle Visualizer for Windows 11",
+    "longDescription": "RESONA is a high-performance Windows 11 desktop idle visualizer powered by native WASAPI audio loopback, real-time 64-band logarithmic DSP analysis, and decoupled WebGL2 shaders.",
     "windows": {
       "nsis": {
         "installMode": "currentUser"
+      },
+      "wix": {
+        "language": "en-US"
       }
     }
   }
