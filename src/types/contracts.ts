@@ -97,3 +97,11 @@ export interface AudioEndpoint {
   name: string;
   isDefault: boolean;
 }
+
+export interface UserPreferences {
+  autoEnabled: boolean;
+  idleDelaySec: number;
+  audioGateEnabled: boolean;
+  selectedPreset: SceneId;
+  targetMonitorId?: string;
+}
