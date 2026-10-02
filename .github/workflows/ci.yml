@@ -37,3 +37,6 @@ jobs:
 
       - name: Cargo Check Native Core
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Run Native Rust Unit Tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
