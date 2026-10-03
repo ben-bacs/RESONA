@@ -1,6 +1,6 @@
 [package]
 name = "resona"
-version = "0.1.1"
+version = "0.1.2"
 description = "Music-Reactive Idle Visualizer for Windows 11"
 authors = ["Benedict Neil D. Bacud"]
 edition = "2021"
