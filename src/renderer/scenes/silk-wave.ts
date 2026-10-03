@@ -98,23 +98,23 @@ export class SilkWaveScene implements IScene {
           float freq2 = 4.5 + fi * 1.1;
           float phase = u_time * (1.2 + fi * 0.25) + fi * 1.57;
 
-          float amp = 0.12 + (bandEnergy * 0.18) + (u_rms * 0.12);
+          float amp = 0.16 + (bandEnergy * 0.38) + (u_rms * 0.30) + (u_transient * 0.22);
           float waveY = baseY + 
             sin(uv.x * freq1 + phase) * amp + 
-            cos(uv.x * freq2 - phase * 0.7) * (amp * 0.45);
+            cos(uv.x * freq2 - phase * 0.7) * (amp * 0.50);
 
           // Distance to ribbon line
           float dist = abs(uv.y - waveY);
-          float glow = lineThick / max(dist, 0.001);
+          float glow = lineThick / max(dist, 0.0008);
 
           // Layer color interpolation
           vec3 layerCol = mix(u_colorA, u_colorB, layerFrac);
           if (i % 2 == 1) {
-            layerCol = mix(layerCol, u_colorC, 0.5);
+            layerCol = mix(layerCol, u_colorC, 0.6);
           }
 
           // Shading and intensity falloff
-          float intensity = glow * (0.8 + bandEnergy * 0.6);
+          float intensity = glow * (1.0 + bandEnergy * 1.4 + u_transient * 1.5);
           finalColor += layerCol * intensity * (1.0 / float(maxLayers + 1));
         }
 
@@ -170,18 +170,18 @@ export class SilkWaveScene implements IScene {
     const dt = Math.min(deltaSeconds, 0.05);
     this.time += dt * this.parameters.motionSpeed;
 
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const decaySpeed = isSilent ? 4.0 : 12.0;
-    const factor = Math.min(1.0, dt * decaySpeed);
+    const sens = this.parameters.sensitivity;
+    const factor = Math.min(1.0, dt * 14.0);
 
-    const targetRms = isSilent ? 0.0 : analysis.rms;
-    const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
+    const targetRms = Math.max(0.12, (analysis?.rms || 0.0) * sens);
+    const targetTransient = (analysis?.transientStrength || 0.0) * sens;
 
     this.smoothedRms += (targetRms - this.smoothedRms) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
     for (let i = 0; i < 64; i++) {
-      const targetBand = isSilent ? 0.0 : (analysis.bands[i] || 0.0);
+      const rawBand = analysis?.bands?.[i] || 0.0;
+      const targetBand = rawBand * sens;
       this.smoothedBands[i] += (targetBand - this.smoothedBands[i]) * factor;
     }
   }

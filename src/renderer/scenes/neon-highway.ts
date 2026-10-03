@@ -123,18 +123,19 @@ export class NeonHighwayScene implements IScene {
           float skyY = (uv.y - horizonY);
           float sunDist = length(vec2(uv.x * 1.2, uv.y - 0.25));
 
-          // Synthwave Sun
-          if (sunDist < 0.45) {
-            float sunGrad = (uv.y - 0.25 + 0.45) / 0.9;
-            vec3 sunColor = mix(u_colorA, u_colorC, sunGrad);
+          // Synthwave Sun pulsing with sub-bass and transients
+          float sunRadius = 0.40 + u_bass * 0.24 + u_transient * 0.18;
+          if (sunDist < sunRadius) {
+            float sunGrad = (uv.y - 0.25 + sunRadius) / (sunRadius * 2.0);
+            vec3 sunColor = mix(u_colorA, u_colorC, clamp(sunGrad, 0.0, 1.0));
 
             // Sun horizontal blind stripes
             float stripes = sin((uv.y - 0.25) * 45.0);
-            if (stripes > 0.3 && uv.y < 0.25) {
-              sunColor *= 0.15;
+            if (stripes > 0.25 && uv.y < 0.25) {
+              sunColor *= 0.12;
             }
 
-            finalColor = sunColor * (1.0 + u_transient * 0.6);
+            finalColor = sunColor * (1.2 + u_transient * 0.8 + u_bass * 0.5);
           }
 
           // Sky background ambient
@@ -194,19 +195,20 @@ export class NeonHighwayScene implements IScene {
     const dt = Math.min(deltaSeconds, 0.05);
     this.time += dt * this.parameters.motionSpeed;
 
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const factor = Math.min(1.0, dt * (isSilent ? 4.0 : 12.0));
+    const sens = this.parameters.sensitivity;
+    const factor = Math.min(1.0, dt * 14.0);
 
-    const targetBass = isSilent ? 0.0 : analysis.bass * this.parameters.sensitivity;
-    const targetMid = isSilent ? 0.0 : analysis.mid * this.parameters.sensitivity;
-    const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
+    const targetBass = Math.max(0.15, (analysis?.bass || 0.0) * sens);
+    const targetMid = Math.max(0.12, (analysis?.mid || 0.0) * sens);
+    const targetTransient = (analysis?.transientStrength || 0.0) * sens;
 
     this.smoothedBass += (targetBass - this.smoothedBass) * factor;
     this.smoothedMid += (targetMid - this.smoothedMid) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
     for (let i = 0; i < 64; i++) {
-      const targetBand = isSilent ? 0.0 : (analysis.bands[i] || 0.0);
+      const rawBand = analysis?.bands?.[i] || 0.0;
+      const targetBand = rawBand * sens;
       this.smoothedBands[i] += (targetBand - this.smoothedBands[i]) * factor;
     }
   }

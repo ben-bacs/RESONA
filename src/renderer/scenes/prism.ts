@@ -83,32 +83,44 @@ export class PrismScene implements IScene {
         a = mod(a, sectorAngle) - 0.5 * sectorAngle;
         a = abs(a); // Mirror symmetry inside sector
 
-        // Reconstruct folded UV coordinates
-        vec2 foldedUv = vec2(cos(a), sin(a)) * r;
+        // Reconstruct folded UV coordinates with audio breathing expansion
+        float audioExpand = 1.0 - clamp(u_rms * 0.22 + u_transient * 0.12, 0.0, 0.35);
+        vec2 foldedUv = vec2(cos(a), sin(a)) * (r * audioExpand);
 
         // Sample spectrum based on radial coordinate
-        int bandIdx = int(clamp(r * 32.0, 0.0, 63.0));
+        int bandIdx = int(clamp(r * 40.0, 0.0, 63.0));
         float bandEnergy = u_bands[bandIdx] * u_sensitivity;
+        float subBass = u_bands[2] * u_sensitivity;
 
-        // Crystalline facet geometry
-        float facet1 = abs(foldedUv.x - 0.35 - (u_rms * 0.15));
-        float facet2 = abs(foldedUv.y - foldedUv.x * 0.577 - (bandEnergy * 0.1));
-        float facet3 = abs(r - 0.5 - (u_transient * 0.12));
+        // Crystalline facet geometry with multi-layered lattice
+        float facet1 = abs(foldedUv.x - 0.35 - (u_rms * 0.18));
+        float facet2 = abs(foldedUv.y - foldedUv.x * 0.577 - (bandEnergy * 0.14));
+        float facet3 = abs(r - (0.45 + subBass * 0.22) - (u_transient * 0.14));
+        float facet4 = abs(foldedUv.x + foldedUv.y * 0.7 - 0.58);
 
-        float line1 = smoothstep(0.015, 0.0, facet1);
-        float line2 = smoothstep(0.015, 0.0, facet2);
-        float line3 = smoothstep(0.02, 0.0, facet3);
+        float line1 = smoothstep(0.024 + u_transient * 0.02, 0.0, facet1);
+        float line2 = smoothstep(0.024 + bandEnergy * 0.02, 0.0, facet2);
+        float line3 = smoothstep(0.032 + u_transient * 0.025, 0.0, facet3);
+        float line4 = smoothstep(0.018, 0.0, facet4) * 0.6;
 
-        float pattern = max(line1, max(line2, line3));
+        float pattern = max(max(line1, line2), max(line3, line4));
 
-        // Prism refraction color shifting
-        float dispersion = sin(r * 8.0 - u_time * 1.5) * 0.5 + 0.5;
+        // Prism refraction color shifting & iridescent chromatic dispersion
+        float dispersion = sin(r * 10.0 - u_time * 2.0 + u_transient * 2.8) * 0.5 + 0.5;
         vec3 prismCol = mix(u_colorA, u_colorB, dispersion);
-        prismCol = mix(prismCol, u_colorC, pattern * 0.7);
+        prismCol = mix(prismCol, u_colorC, pattern * 0.75 + u_transient * 0.35);
 
-        // Core jewel glow
-        float centerGlow = 0.06 / (r + 0.08) * (0.8 + u_rms * 1.2);
-        vec3 finalColor = prismCol * (pattern * 1.5 + centerGlow) * u_brightness;
+        // Radiant jewel rays radiating through crystal facets on beats
+        float rayAngle = atan(uv.y, uv.x) * sectors + u_time * 0.7;
+        float rays = pow(max(0.0, cos(rayAngle)), 6.0) * (0.25 + u_transient * 1.3 + u_rms * 0.5);
+
+        // Core jewel glow & ambient luminous floor
+        float centerGlow = 0.085 / (r + 0.07) * (0.85 + u_rms * 1.6 + u_transient * 2.0);
+        vec3 finalColor = (prismCol * (pattern * 1.8 + rays * 1.0) + mix(u_colorB, u_colorC, 0.5) * centerGlow) * u_brightness;
+
+        // Soft chromatic ring flare on beat hits
+        float beatRing = smoothstep(0.04, 0.0, abs(r - (0.35 + u_transient * 0.45))) * u_transient * 0.85;
+        finalColor += u_colorA * beatRing * u_brightness;
 
         finalColor = clamp(finalColor, 0.0, 1.0);
         fragColor = vec4(finalColor, 1.0);
@@ -156,22 +168,26 @@ export class PrismScene implements IScene {
     const dt = Math.min(deltaSeconds, 0.05);
     this.time += dt * this.parameters.motionSpeed;
 
-    // Reduced motion clamps rotation to 0
-    const rotSpeedDeg = Number(this.parameters.presetSpecific?.rotationDegPerSec ?? 6.0);
-    const radPerSec = (rotSpeedDeg * Math.PI) / 180.0;
-    this.currentAngle += radPerSec * dt * this.parameters.motionSpeed;
+    const sens = this.parameters.sensitivity;
+    const rawRms = analysis ? analysis.rms * sens : 0.0;
+    const rawTransient = analysis ? analysis.transientStrength * sens : 0.0;
 
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const factor = Math.min(1.0, dt * (isSilent ? 4.0 : 12.0));
+    const targetRms = Math.max(0.12, rawRms);
+    const targetTransient = rawTransient;
 
-    const targetRms = isSilent ? 0.0 : analysis.rms * this.parameters.sensitivity;
-    const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
-
+    const factor = Math.min(1.0, dt * 14.0);
     this.smoothedRms += (targetRms - this.smoothedRms) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
+    // Reduced motion clamps rotation to 0; otherwise rotation speeds up dynamically on beats
+    const rotSpeedDeg = Number(this.parameters.presetSpecific?.rotationDegPerSec ?? 6.0);
+    const radPerSec = (rotSpeedDeg * Math.PI) / 180.0;
+    const audioAccel = 1.0 + this.smoothedRms * 1.6 + this.smoothedTransient * 2.2;
+    this.currentAngle += radPerSec * dt * this.parameters.motionSpeed * audioAccel;
+
     for (let i = 0; i < 64; i++) {
-      const targetBand = isSilent ? 0.0 : (analysis.bands[i] || 0.0);
+      const rawBand = analysis ? (analysis.bands[i] || 0.0) * sens : 0.0;
+      const targetBand = Math.max(0.08, rawBand);
       this.smoothedBands[i] += (targetBand - this.smoothedBands[i]) * factor;
     }
   }
