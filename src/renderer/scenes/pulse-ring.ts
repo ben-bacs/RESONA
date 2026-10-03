@@ -27,8 +27,8 @@ export class PulseRingScene implements IScene {
   private height = 600;
   private time = 0;
 
-  // Smoothed / decaying audio values
-  private smoothedRms = 0;
+  // Smoothed audio values
+  private smoothedRms = 0.15;
   private smoothedTransient = 0;
   private smoothedBands = new Float32Array(64);
 
@@ -78,33 +78,78 @@ export class PulseRingScene implements IScene {
         float angle = atan(uv.y, uv.x);
         if (angle < 0.0) angle += 2.0 * PI;
 
-        // Sample band corresponding to angle around circle (mirrored for symmetry)
-        float normalizedAngle = abs(angle / PI - 1.0);
-        int bandIndex = int(clamp(normalizedAngle * 63.0, 0.0, 63.0));
-        float bandEnergy = u_bands[bandIndex] * u_sensitivity;
+        // Sample symmetric angle for 64 logarithmic bands
+        float normAngle = abs(angle / PI - 1.0);
+        int bandIdx = int(clamp(normAngle * 63.0, 0.0, 63.0));
+        float bandVal = u_bands[bandIdx] * u_sensitivity;
 
-        // Base ring radius modulated by audio loudness & transient
-        float baseRadius = 0.45 + (u_rms * 0.18) + (u_transient * 0.08);
-        float wave = sin(angle * 12.0 + u_time * 2.0) * (0.015 + bandEnergy * 0.09);
-        float ringDistance = abs(dist - (baseRadius + wave));
+        int bassIdx = int(clamp(normAngle * 12.0, 0.0, 12.0));
+        float bassVal = u_bands[bassIdx] * u_sensitivity;
 
-        // Thickness & glow in logical pixels converted to NDC
-        float minDimension = min(u_resolution.x, u_resolution.y);
-        float thickness = max(u_ringWidthPx / minDimension, 0.004) + (bandEnergy * 0.02);
-        float glowFactor = 0.2 + u_glow * 1.5;
-        float glow = (thickness / max(ringDistance, 0.0008)) * u_brightness * glowFactor;
+        int trebleIdx = int(clamp(32.0 + normAngle * 31.0, 32.0, 63.0));
+        float trebleVal = u_bands[trebleIdx] * u_sensitivity;
 
-        // Dynamic neon palette blending
-        vec3 ringColor = mix(u_colorA, u_colorB, sin(angle + u_time * 0.8) * 0.5 + 0.5);
-        ringColor = mix(ringColor, u_colorC, clamp(u_transient * 0.8 + bandEnergy * 0.4, 0.0, 1.0));
+        // High-energy beat pulse dynamics
+        float beatPulse = u_rms * 0.45 + u_transient * 0.40 + bassVal * 0.25;
 
-        vec3 finalColor = ringColor * glow;
+        // Multi-frequency Fourier wave deformation
+        float wave1 = sin(angle * 8.0 + u_time * 2.5) * (0.035 + bandVal * 0.20);
+        float wave2 = cos(angle * 16.0 - u_time * 3.8) * (0.020 + trebleVal * 0.14);
+        float wave3 = sin(angle * 32.0 + u_time * 5.2) * (0.010 + trebleVal * 0.08);
+        float totalWave = wave1 + wave2 + wave3;
 
-        // Subtle ambient center aura
-        float aura = u_colorA.r * 0.05 + u_colorB.g * 0.05;
-        finalColor += u_colorA * (aura * u_brightness * (1.0 - smoothstep(0.0, 1.3, dist)));
+        // 1. Primary main reactive ring
+        float mainRadius = 0.42 + beatPulse * 0.22 + totalWave;
 
-        // Tone map clamp
+        // 2. Inner pulsating sub-bass iris
+        float innerRadius = 0.22 + (bassVal * 0.16 + u_rms * 0.12) + sin(angle * 6.0 - u_time * 2.0) * (0.02 + bassVal * 0.07);
+        float dInner = abs(dist - innerRadius);
+
+        // 3. Outer shimmering treble halo
+        float outerRadius = 0.62 + (u_transient * 0.14 + trebleVal * 0.12) + cos(angle * 24.0 + u_time * 4.0) * (0.015 + trebleVal * 0.09);
+        float dOuter = abs(dist - outerRadius);
+
+        // Dynamic thickness & glow in NDC
+        float minDim = min(u_resolution.x, u_resolution.y);
+        float baseThick = max(u_ringWidthPx / minDim, 0.0035);
+        float glowExp = 0.25 + u_glow * 1.8;
+
+        // Chromatic dispersion on beat hits
+        float chromaShift = u_transient * 0.022 + u_rms * 0.012;
+        float dMainR = abs(dist - (mainRadius + chromaShift));
+        float dMainG = abs(dist - mainRadius);
+        float dMainB = abs(dist - (mainRadius - chromaShift));
+
+        float glowR = (baseThick / max(dMainR, 0.0009)) * glowExp;
+        float glowG = (baseThick / max(dMainG, 0.0009)) * glowExp;
+        float glowB = (baseThick / max(dMainB, 0.0009)) * glowExp;
+        vec3 mainGlowCol = vec3(glowR, glowG, glowB);
+
+        // Secondary ring glows
+        float innerGlow = (baseThick * 0.85 / max(dInner, 0.0011)) * glowExp * 0.75;
+        float outerGlow = (baseThick * 0.65 / max(dOuter, 0.0014)) * glowExp * 0.60;
+
+        // Dynamic iridescent palette blend
+        vec3 colGrad = mix(u_colorA, u_colorB, sin(angle * 2.0 + u_time * 1.2) * 0.5 + 0.5);
+        colGrad = mix(colGrad, u_colorC, clamp(u_transient * 1.2 + bandVal * 0.5, 0.0, 1.0));
+
+        vec3 innerCol = mix(u_colorB, u_colorC, sin(u_time * 2.2) * 0.5 + 0.5);
+        vec3 outerCol = mix(u_colorC, u_colorA, cos(angle * 4.0 + u_time) * 0.5 + 0.5);
+
+        vec3 finalColor = mainGlowCol * colGrad;
+        finalColor += innerGlow * innerCol;
+        finalColor += outerGlow * outerCol;
+
+        // Central resonant energy core
+        float coreAura = exp(-dist * 3.8) * (0.22 + beatPulse * 0.55);
+        finalColor += mix(u_colorA, u_colorB, 0.5) * coreAura;
+
+        // Radial light beams emanating on beat transient peaks
+        float rays = pow(max(0.0, sin(angle * 12.0 + u_time * 1.5)), 8.0) * u_transient * 0.55;
+        finalColor += u_colorC * rays * exp(-dist * 1.8);
+
+        // Tone map & master brightness
+        finalColor *= u_brightness * 1.4;
         finalColor = clamp(finalColor, 0.0, 1.0);
         fragColor = vec4(finalColor, 1.0);
       }
@@ -149,23 +194,21 @@ export class PulseRingScene implements IScene {
   }
 
   update(deltaSeconds: number, analysis: AnalysisFrame): void {
-    // Clamp delta time to avoid large jumps
     const dt = Math.min(deltaSeconds, 0.05);
     this.time += dt * this.parameters.motionSpeed;
 
-    // Silence and stale-frame decay
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const decaySpeed = isSilent ? 4.0 : 12.0;
-    const factor = Math.min(1.0, dt * decaySpeed);
+    const sens = this.parameters.sensitivity;
+    const factor = Math.min(1.0, dt * 14.0);
 
-    const targetRms = isSilent ? 0.0 : analysis.rms;
-    const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
+    const targetRms = Math.max(0.12, (analysis?.rms || 0.0) * sens);
+    const targetTransient = Math.max(0.0, (analysis?.transientStrength || 0.0) * sens);
 
     this.smoothedRms += (targetRms - this.smoothedRms) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
     for (let i = 0; i < 64; i++) {
-      const targetBand = isSilent ? 0.0 : (analysis.bands[i] || 0.0);
+      const rawBand = analysis?.bands?.[i] || 0.0;
+      const targetBand = rawBand * sens;
       this.smoothedBands[i] += (targetBand - this.smoothedBands[i]) * factor;
     }
   }

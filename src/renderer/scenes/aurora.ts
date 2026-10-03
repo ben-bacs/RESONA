@@ -109,12 +109,12 @@ export class AuroraScene implements IScene {
 
           // Vertical ray folds
           float rayNoise = noise(vec2(uv.x * 8.0 + flowTime * 0.5, fi));
-          float flare = (u_rms * 0.5) + (u_transient * 0.4) + (bandEnergy * 0.3);
+          float flare = (u_rms * 0.85) + (u_transient * 0.85) + (bandEnergy * 0.65);
 
           // Curtain distance and vertical flare height
           float dy = uv.y - curveY;
           if (dy > -0.1) {
-            float curtainHeight = 0.5 + flare * 0.4;
+            float curtainHeight = 0.55 + flare * 0.60;
             float verticalAtten = smoothstep(curtainHeight, 0.0, dy);
             float baseAtten = smoothstep(-0.1, 0.0, dy);
             float curtainDensity = verticalAtten * baseAtten * (0.6 + rayNoise * 0.4);
@@ -124,7 +124,7 @@ export class AuroraScene implements IScene {
             vec3 curtainColor = mix(u_colorA, u_colorB, heightFrac);
             curtainColor = mix(curtainColor, u_colorC, u_transient * 0.5);
 
-            finalColor += curtainColor * curtainDensity * (0.8 + flare);
+            finalColor += curtainColor * curtainDensity * (1.2 + flare * 1.4);
           }
         }
 
@@ -179,17 +179,18 @@ export class AuroraScene implements IScene {
     const dt = Math.min(deltaSeconds, 0.05);
     this.time += dt * this.parameters.motionSpeed;
 
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const factor = Math.min(1.0, dt * (isSilent ? 4.0 : 12.0));
+    const sens = this.parameters.sensitivity;
+    const factor = Math.min(1.0, dt * 14.0);
 
-    const targetRms = isSilent ? 0.0 : analysis.rms;
-    const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
+    const targetRms = Math.max(0.12, (analysis?.rms || 0.0) * sens);
+    const targetTransient = (analysis?.transientStrength || 0.0) * sens;
 
     this.smoothedRms += (targetRms - this.smoothedRms) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
     for (let i = 0; i < 64; i++) {
-      const targetBand = isSilent ? 0.0 : (analysis.bands[i] || 0.0);
+      const rawBand = analysis?.bands?.[i] || 0.0;
+      const targetBand = rawBand * sens;
       this.smoothedBands[i] += (targetBand - this.smoothedBands[i]) * factor;
     }
   }

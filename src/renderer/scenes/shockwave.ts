@@ -22,6 +22,9 @@ export class ShockwaveScene implements IScene {
 
   // Quad Uniforms (shockwave ring)
   private uResolutionLoc: WebGLUniformLocation | null = null;
+  private uTimeLoc: WebGLUniformLocation | null = null;
+  private uRmsLoc: WebGLUniformLocation | null = null;
+  private uTransientLoc: WebGLUniformLocation | null = null;
   private uBrightnessLoc: WebGLUniformLocation | null = null;
   private uRingRadiusLoc: WebGLUniformLocation | null = null;
   private uRingIntensityLoc: WebGLUniformLocation | null = null;
@@ -37,6 +40,7 @@ export class ShockwaveScene implements IScene {
 
   private width = 800;
   private height = 600;
+  private time = 0;
 
   // Particle pool (SDD Section 9: Low: 256, Medium: 1024, High: 2048)
   private maxPoolCapacity = 2048;
@@ -84,13 +88,16 @@ export class ShockwaveScene implements IScene {
     this.activeParticles = 0;
     this.nextParticleIndex = 0;
 
-    // 1. Quad Program for background aura and expanding shockwave ring
+    // 1. Quad Program for background aura, core vortex, and expanding shockwave rings
     const quadFs = `#version 300 es
       precision highp float;
       in vec2 v_uv;
       out vec4 fragColor;
 
       uniform vec2 u_resolution;
+      uniform float u_time;
+      uniform float u_rms;
+      uniform float u_transient;
       uniform float u_brightness;
       uniform float u_ringRadius;
       uniform float u_ringIntensity;
@@ -106,18 +113,40 @@ export class ShockwaveScene implements IScene {
 
         vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution) / min(u_resolution.x, u_resolution.y);
         float d = length(uv);
+        float angle = atan(uv.y, uv.x);
 
-        // Expanding shockwave distortion ring
+        // Ambient undulating energy wave ripples (ensures scene is always vibrant)
+        float ambientWave = sin(d * 16.0 - u_time * 3.2) * 0.5 + 0.5;
+        float ambientRings = smoothstep(0.06, 0.0, abs(sin(d * 5.5 - u_time * 1.4))) * 0.22;
+
+        // Expanding primary shockwave ring with audio widening
         float ringDist = abs(d - u_ringRadius);
-        float ring = smoothstep(0.05, 0.0, ringDist) * u_ringIntensity;
+        float ring = smoothstep(0.065 + u_transient * 0.04, 0.0, ringDist) * u_ringIntensity;
 
-        // Core glow
-        float core = smoothstep(0.4, 0.0, d) * (0.15 + u_ringIntensity * 0.3);
+        // Secondary harmonic trailing wave
+        float secondaryDist = abs(d - u_ringRadius * 0.68);
+        float secondaryRing = smoothstep(0.048, 0.0, secondaryDist) * (u_ringIntensity * 0.55);
 
-        vec3 ringColor = mix(u_colorA, u_colorB, d * 0.8);
-        ringColor = mix(ringColor, u_colorC, ring);
+        // Blazing core plasma vortex & radial energy filaments
+        float plasmaSpokes = pow(max(0.0, cos(angle * 8.0 + u_time * 2.0)), 4.0) * (0.28 + u_transient * 0.85);
+        float core = smoothstep(0.45 + u_rms * 0.35, 0.0, d) * (0.35 + u_rms * 1.3 + u_transient * 1.6);
+        float innerVortex = 0.075 / (d + 0.08) * (0.65 + u_rms * 1.3);
 
-        vec3 col = (ringColor * ring * 2.0 + u_colorA * core) * u_brightness;
+        // Chromatic dispersion across wavefront
+        vec3 ringColor = mix(u_colorA, u_colorB, clamp(d * 0.8 + ambientWave * 0.2, 0.0, 1.0));
+        ringColor = mix(ringColor, u_colorC, clamp(ring * 1.2 + u_transient * 0.5, 0.0, 1.0));
+
+        // Combine radial shockwaves, core plasma, and ambient breathing aura
+        vec3 col = (ringColor * (ring * 2.5 + secondaryRing * 1.5 + ambientRings)
+                  + u_colorA * (core + plasmaSpokes)
+                  + mix(u_colorB, u_colorC, 0.5) * innerVortex) * u_brightness;
+
+        // Transient chromatic dispersion ring
+        if (u_transient > 0.05) {
+          float flashRing = smoothstep(0.08, 0.0, abs(d - (0.2 + u_transient * 0.45))) * u_transient;
+          col += u_colorC * flashRing * 1.2 * u_brightness;
+        }
+
         fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
       }
     `;
@@ -132,6 +161,9 @@ export class ShockwaveScene implements IScene {
     this.quadVbo = quad.vbo;
 
     this.uResolutionLoc = gl.getUniformLocation(qProg, "u_resolution");
+    this.uTimeLoc = gl.getUniformLocation(qProg, "u_time");
+    this.uRmsLoc = gl.getUniformLocation(qProg, "u_rms");
+    this.uTransientLoc = gl.getUniformLocation(qProg, "u_transient");
     this.uBrightnessLoc = gl.getUniformLocation(qProg, "u_brightness");
     this.uRingRadiusLoc = gl.getUniformLocation(qProg, "u_ringRadius");
     this.uRingIntensityLoc = gl.getUniformLocation(qProg, "u_ringIntensity");
@@ -272,17 +304,20 @@ export class ShockwaveScene implements IScene {
 
   update(deltaSeconds: number, analysis: AnalysisFrame): void {
     const dt = Math.min(deltaSeconds, 0.05);
+    this.time += dt * this.parameters.motionSpeed;
 
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const factor = Math.min(1.0, dt * (isSilent ? 4.0 : 12.0));
+    const sens = this.parameters.sensitivity;
+    const rawRms = analysis ? analysis.rms * sens : 0.0;
+    const rawTransient = analysis ? analysis.transientStrength * sens : 0.0;
 
-    const targetRms = isSilent ? 0.0 : analysis.rms * this.parameters.sensitivity;
-    const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
+    const targetRms = Math.max(0.12, rawRms);
+    const targetTransient = rawTransient;
 
+    const factor = Math.min(1.0, dt * 14.0);
     this.smoothedRms += (targetRms - this.smoothedRms) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
-    const decaySeconds = Math.max(0.2, Number(this.parameters.presetSpecific?.decaySeconds ?? 0.8));
+    const decaySeconds = Math.max(0.3, Number(this.parameters.presetSpecific?.decaySeconds ?? 0.8));
     const burstParticles = Math.round(Number(this.parameters.presetSpecific?.burstParticles ?? 64));
 
     this.spawnCooldown = Math.max(0, this.spawnCooldown - dt);
@@ -290,16 +325,25 @@ export class ShockwaveScene implements IScene {
     const transientFired =
       analysis &&
       (analysis.transientCounter !== this.lastTransientCounter ||
-        (analysis.transientStrength > 0.45 && this.spawnCooldown <= 0));
+        (analysis.transientStrength > 0.35 && this.spawnCooldown <= 0));
 
     if (analysis) {
       this.lastTransientCounter = analysis.transientCounter;
     }
 
     if (transientFired && this.spawnCooldown <= 0) {
-      this.spawnCooldown = 0.1;
-      const intensity = 0.6 + Math.min(1.0, (analysis?.transientStrength || 0.5) * 0.9);
+      this.spawnCooldown = 0.08;
+      const intensity = 0.75 + Math.min(1.0, (analysis?.transientStrength || 0.5) * 1.1);
       this.triggerBurst(decaySeconds, burstParticles, intensity);
+    } else if (this.spawnCooldown <= 0 && targetRms > 0.4 && this.currentRing.amplitude < 0.25) {
+      // Rhythmic bass pulse burst when energy rises
+      this.spawnCooldown = 0.22;
+      this.triggerBurst(decaySeconds * 0.8, Math.round(burstParticles * 0.5), 0.5 + targetRms * 0.5);
+    }
+
+    // Ambient spark generation: ensure at least some luminous embers swirl from the core
+    if (this.activeParticles < 12 && Math.random() < 0.25) {
+      this.triggerBurst(decaySeconds * 0.6, 3, 0.35);
     }
 
     // Update ring
@@ -343,6 +387,9 @@ export class ShockwaveScene implements IScene {
     gl.bindVertexArray(this.quadVao);
 
     gl.uniform2f(this.uResolutionLoc, this.width, this.height);
+    gl.uniform1f(this.uTimeLoc, this.time);
+    gl.uniform1f(this.uRmsLoc, this.smoothedRms);
+    gl.uniform1f(this.uTransientLoc, this.smoothedTransient);
     gl.uniform1f(this.uBrightnessLoc, this.parameters.brightness);
 
     const ringProgress = this.currentRing.age / Math.max(0.01, this.currentRing.maxLife);

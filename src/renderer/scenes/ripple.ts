@@ -116,13 +116,13 @@ export class RippleScene implements IScene {
         vec3 rippleColor = mix(u_colorA, u_colorB, sin(length(uv) * 4.0 - u_time) * 0.5 + 0.5);
         rippleColor = mix(rippleColor, u_colorC, clamp(totalRipple * 0.5, 0.0, 1.0));
 
-        finalColor = rippleColor * totalRipple * 1.8;
+        finalColor = rippleColor * totalRipple * 2.8;
 
         // Ambient water surface reflections / caustics
-        float caustics = sin(uv.x * 12.0 + u_time) * sin(uv.y * 12.0 + u_time * 0.8) * 0.04;
-        finalColor += u_colorA * (max(0.0, caustics) * u_brightness);
+        float caustics = sin(uv.x * 12.0 + u_time) * sin(uv.y * 12.0 + u_time * 0.8) * 0.08;
+        finalColor += u_colorA * (max(0.0, caustics) * u_brightness * 2.0);
 
-        finalColor *= u_brightness;
+        finalColor *= u_brightness * 1.25;
         finalColor = clamp(finalColor, 0.0, 1.0);
         fragColor = vec4(finalColor, 1.0);
       }
@@ -170,27 +170,28 @@ export class RippleScene implements IScene {
     const decaySeconds = Math.max(0.5, Number(this.parameters.presetSpecific?.decaySeconds ?? 2.0));
     this.spawnCooldown = Math.max(0, this.spawnCooldown - dt);
 
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const factor = Math.min(1.0, dt * (isSilent ? 4.0 : 12.0));
+    const sens = this.parameters.sensitivity;
+    const factor = Math.min(1.0, dt * 14.0);
 
-    const targetRms = isSilent ? 0.0 : analysis.rms * this.parameters.sensitivity;
-    const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
+    const targetRms = Math.max(0.12, (analysis?.rms || 0.0) * sens);
+    const targetTransient = (analysis?.transientStrength || 0.0) * sens;
 
     this.smoothedRms += (targetRms - this.smoothedRms) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
-    // Check transient onset or high audio peak to spawn ripple
+    // Check transient onset or high audio peak or ambient rhythm to spawn ripple
     const transientFired =
       analysis &&
       (analysis.transientCounter !== this.lastTransientCounter ||
-        (analysis.transientStrength > 0.4 && this.spawnCooldown <= 0));
+        (analysis.transientStrength > 0.35 && this.spawnCooldown <= 0) ||
+        (this.ripples.length < 3 && Math.random() < 0.04));
 
     if (analysis) {
       this.lastTransientCounter = analysis.transientCounter;
     }
 
     if (transientFired && this.spawnCooldown <= 0) {
-      this.spawnCooldown = 0.08; // Limit spawn rate to avoid flood
+      this.spawnCooldown = 0.06; // Fast responsive spawn
 
       // Fixed capacity pool: if full, drop oldest
       if (this.ripples.length >= this.maxPoolSize) {
@@ -199,12 +200,12 @@ export class RippleScene implements IScene {
 
       // Spawn at center with small harmonic jitter based on bands
       const angle = Math.random() * Math.PI * 2.0;
-      const radiusOffset = (analysis.mid || 0) * 0.3;
+      const radiusOffset = (analysis?.mid || 0.1) * 0.35;
       this.ripples.push({
         x: Math.cos(angle) * radiusOffset,
         y: Math.sin(angle) * radiusOffset,
         age: 0,
-        amplitude: 0.5 + Math.min(1.0, (analysis?.transientStrength || 0.5) * 0.8),
+        amplitude: 0.6 + Math.min(1.2, (analysis?.transientStrength || 0.4) * 1.2),
         maxLife: decaySeconds,
       });
     }

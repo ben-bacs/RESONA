@@ -203,20 +203,20 @@ export class StarDriftScene implements IScene {
   update(deltaSeconds: number, analysis: AnalysisFrame): void {
     const dt = Math.min(deltaSeconds, 0.05);
 
-    const isSilent = !analysis || analysis.activity === "Silent";
-    const factor = Math.min(1.0, dt * (isSilent ? 4.0 : 12.0));
+    const sens = this.parameters.sensitivity;
+    const factor = Math.min(1.0, dt * 14.0);
 
-    const targetBass = isSilent ? 0.0 : analysis.bass * this.parameters.sensitivity;
-    const targetTreble = isSilent ? 0.0 : analysis.treble * this.parameters.sensitivity;
-    const targetTransient = isSilent ? 0.0 : analysis.transientStrength;
+    const targetBass = Math.max(0.15, (analysis?.bass || 0.0) * sens);
+    const targetTreble = Math.max(0.12, (analysis?.treble || 0.0) * sens);
+    const targetTransient = (analysis?.transientStrength || 0.0) * sens;
 
     this.smoothedBass += (targetBass - this.smoothedBass) * factor;
     this.smoothedTreble += (targetTreble - this.smoothedTreble) * factor;
     this.smoothedTransient += (targetTransient - this.smoothedTransient) * factor;
 
-    // Effective travel speed (zero under reduced motion)
-    const travelSpeedParam = Number(this.parameters.presetSpecific?.travelSpeed ?? 0.2);
-    const speed = travelSpeedParam * this.parameters.motionSpeed * (0.3 + this.smoothedBass * 1.8);
+    // Effective travel speed with intense beat hyperdrive boost
+    const travelSpeedParam = Number(this.parameters.presetSpecific?.travelSpeed ?? 0.25);
+    const speed = travelSpeedParam * this.parameters.motionSpeed * (0.6 + this.smoothedBass * 3.2 + this.smoothedTransient * 2.8);
 
     // Update particle Z positions with recycling
     for (let i = 0; i < this.activeCount; i++) {

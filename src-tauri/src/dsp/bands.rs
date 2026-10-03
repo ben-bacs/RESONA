@@ -92,10 +92,11 @@ impl BandFilterbank {
             }
         }
 
-        // Normalization per SDD Section 6.2: clamp((10*log10(max(B, 1e-12)) + 80) / 80, 0, 1)
+        // Perceptually enhanced normalization: expands dynamic contrast for vibrant visual reactivity
         let normalize = |power: f32| -> f32 {
             let db = 10.0 * power.max(1e-12).log10();
-            ((db + 80.0) / 80.0).clamp(0.0, 1.0)
+            let norm = ((db + 75.0) / 65.0).clamp(0.0, 1.0);
+            norm.powf(0.7)
         };
 
         let mut normalized_bands = [0.0f32; NUM_BANDS];

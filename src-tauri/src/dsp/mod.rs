@@ -22,9 +22,10 @@ pub struct DspEngine {
     above_entry_duration_sec: f32,
     below_exit_duration_sec: f32,
 
-    // Smoothed RMS
+    // Smoothed RMS & Transients
     smoothed_rms: f32,
     smoothed_peak: f32,
+    smoothed_transient: f32,
 }
 
 impl DspEngine {
@@ -42,6 +43,7 @@ impl DspEngine {
             below_exit_duration_sec: 0.0,
             smoothed_rms: 0.0,
             smoothed_peak: 0.0,
+            smoothed_transient: 0.0,
         }
     }
 
@@ -149,8 +151,16 @@ impl DspEngine {
         let (bands, bass, mid, treble) = self.filterbank.compute_bands(&psd, dt);
 
         let dbfs = 20.0 * (self.smoothed_rms.max(1e-9)).log10();
-        let (transient_counter, transient_strength) =
+        let (transient_counter, raw_transient) =
             self.transient_detector.process(&psd, dbfs, dt);
+
+        // Peak-hold with 160ms exponential decay so UI polling catches every beat
+        if raw_transient > self.smoothed_transient {
+            self.smoothed_transient = raw_transient;
+        } else {
+            let tau = 0.160;
+            self.smoothed_transient *= (-dt / tau).exp();
+        }
 
         AnalysisFrame {
             schema_version: 1,
@@ -165,7 +175,7 @@ impl DspEngine {
             mid,
             treble,
             transient_counter,
-            transient_strength,
+            transient_strength: self.smoothed_transient,
             activity: self.activity_state,
             discontinuity: false,
         }
